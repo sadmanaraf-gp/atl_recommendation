@@ -1,0 +1,23 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+venv.bak/
+.venv/
+
+# Notebooks
+.ipynb_checkpoints
+
+# Data
+data/
+
+# Artifacts
+artifacts/
