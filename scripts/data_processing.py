@@ -20,7 +20,7 @@ def preprocess_data(base_df, infer=False):
     df.columns = df.columns.str.lower()
     
     # One-hot encode
-    df = pd.get_dummies(df, columns=['circle','region','rchg_chnl','segment_9box'])
+    df = pd.get_dummies(df, columns=['circle','region','rchg_chnl'])
     df.columns = df.columns.str.lower()
 
     # Remove outliers

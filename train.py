@@ -14,7 +14,7 @@ load_dotenv()
 
 from scripts.data_processing import load_and_process_data
 from scripts.model import build_model
-from scripts.config import FEATURES, TARGET, EPOCHS, BATCH_SIZE, VALIDATION_SPLIT
+from scripts.config import TAKER_FEATURES, NONTAKER_FEATURES, TARGET, EPOCHS, BATCH_SIZE, VALIDATION_SPLIT
 import warnings
 warnings.filterwarnings(
     "ignore",
@@ -52,7 +52,7 @@ def main():
     base_sample = base[base.pack_rank==1].sample(frac=0.7, random_state=111)
     train_ind, test_ind = train_test_split(base_sample.index, test_size=0.3, random_state=123)
     
-    train_x = base_sample.loc[train_ind, FEATURES].astype(np.float32)
+    train_x = base_sample.loc[train_ind, TAKER_FEATURES].astype(np.float32)
     train_y = base_sample.loc[train_ind, 'label_one_hot']
     
     # Scaling
@@ -60,17 +60,17 @@ def main():
     train_x_scaled = sc.transform(train_x)
     
     # Save the scaler
-    with open('artifacts/pl_scaler_taker.pkl', 'wb') as f:
+    with open('artifacts/atl_scaler_taker.pkl', 'wb') as f:
         pickle.dump(sc, f)
-    print("Taker scaler saved to artifacts/pl_scaler_taker.pkl")
+    print("Taker scaler saved to artifacts/atl_scaler_taker.pkl")
 
     # 3. Train Taker model
     print("Training 'Taker' model...")
-    model_taker = build_model(input_shape=len(FEATURES))
+    model_taker = build_model(input_shape=len(TAKER_FEATURES))
     model_taker.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     
     checkpointer = ModelCheckpoint(
-        filepath='artifacts/pl_reco_taker.h5',
+        filepath='artifacts/atl_reco_taker.h5',
         monitor='val_loss',
         verbose=1,
         save_best_only=True
@@ -87,7 +87,7 @@ def main():
         validation_split=VALIDATION_SPLIT,
         callbacks=[checkpointer]
     )
-    print("Taker model training complete. Best model saved to artifacts/pl_reco_taker.h5")
+    print("Taker model training complete. Best model saved to artifacts/atl_reco_taker.h5")
 
     # 4. Prepare and Train Non-Taker model (logic is similar)
     print("\nPreparing and training 'Non-Taker' model...")
@@ -95,21 +95,21 @@ def main():
     base_sample_non_taker = base.sample(frac=1, random_state=111)
     train_ind_nt, _ = train_test_split(base_sample_non_taker.index, test_size=0.3, random_state=123)
     
-    train_x_nt = base_sample_non_taker.loc[train_ind_nt, FEATURES].astype(np.float32)
+    train_x_nt = base_sample_non_taker.loc[train_ind_nt, NONTAKER_FEATURES].astype(np.float32)
     train_y_nt = base_sample_non_taker.loc[train_ind_nt, 'label_one_hot']
 
     sc_non_taker = StandardScaler().fit(train_x_nt)
     train_x_scaled_nt = sc_non_taker.transform(train_x_nt)
 
-    with open('artifacts/pl_scaler_non_taker.pkl', 'wb') as f:
+    with open('artifacts/atl_scaler_non_taker.pkl', 'wb') as f:
         pickle.dump(sc_non_taker, f)
-    print("Non-Taker scaler saved to artifacts/pl_scaler_non_taker.pkl")
+    print("Non-Taker scaler saved to artifacts/atl_scaler_non_taker.pkl")
 
-    model_non_taker = build_model(input_shape=len(FEATURES))
+    model_non_taker = build_model(input_shape=len(NONTAKER_FEATURES))
     model_non_taker.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     
     checkpointer_nt = ModelCheckpoint(
-        filepath='artifacts/pl_reco_non_taker.h5',
+        filepath='artifacts/atl_reco_non_taker.h5',
         monitor='val_loss',
         verbose=1,
         save_best_only=True
@@ -126,7 +126,7 @@ def main():
         validation_split=VALIDATION_SPLIT,
         callbacks=[checkpointer_nt]
     )
-    print("Non-Taker model training complete. Best model saved to artifacts/pl_reco_non_taker.h5")
+    print("Non-Taker model training complete. Best model saved to artifacts/atl_reco_non_taker.h5")
 
 if __name__ == '__main__':
     main()

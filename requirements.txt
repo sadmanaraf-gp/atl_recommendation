@@ -1,7 +1,7 @@
 pandas
 numpy
 scikit-learn
-tensorflow
+tensorflow[and-cuda]
 keras
 tf2onnx
 oracledb
