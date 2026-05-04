@@ -20,7 +20,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class DateParams:
     # Fixed reference date for inference run
-    _ref_date = datetime.date(2026, 1, 15)
+    _ref_date = datetime.date.today()
 
     # Label month = Dec 2025
     _label_date = _ref_date.replace(day=1) - relativedelta(months=1)
@@ -184,9 +184,9 @@ STATEMENTS: List[str] = [
     LEFT JOIN (SELECT DISTINCT AMOUNT, SRVC_ENC FROM TBL_ATL_MAPPING WHERE DAY_KEY='{DP.mapping_day_key}') H ON A.AMOUNT7=H.AMOUNT
     LEFT JOIN (SELECT DISTINCT AMOUNT, SRVC_ENC FROM TBL_ATL_MAPPING WHERE DAY_KEY='{DP.mapping_day_key}') I ON A.AMOUNT8=I.AMOUNT
     """,
-       "DROP TABLE SA_TBL_ATL_BASE_INFER_01_TEST PURGE",
+       "DROP TABLE SA_TBL_ATL_BASE_INFER_01 PURGE",
     f"""
-    CREATE TABLE SA_TBL_ATL_BASE_INFER_01_TEST
+    CREATE TABLE SA_TBL_ATL_BASE_INFER_01
     COMPRESS FOR ARCHIVE HIGH AS
     SELECT /*+ PARALLEL(8) */
            A.MSISDN,
@@ -224,9 +224,9 @@ STATEMENTS: List[str] = [
     # =========================
     # Inference Base – T-1
     # =========================
-    "DROP TABLE SA_TBL_ATL_BASE_INFER_02_TEST PURGE",
+    "DROP TABLE SA_TBL_ATL_BASE_INFER_02 PURGE",
     f"""
-    CREATE TABLE SA_TBL_ATL_BASE_INFER_02_TEST
+    CREATE TABLE SA_TBL_ATL_BASE_INFER_02
     COMPRESS FOR ARCHIVE HIGH AS
     SELECT /*+ PARALLEL(8) */
            A.MSISDN AS MSISDN_1,
@@ -242,7 +242,7 @@ STATEMENTS: List[str] = [
            DATAREV_TRIG AS DATAREV_TRIG_1
     FROM gpbi_marketing.gpbi_mstr_detail_info PARTITION({DP.part_t_1}) A
     INNER JOIN (
-        SELECT DISTINCT MSISDN FROM SA_TBL_ATL_BASE_INFER_01_TEST
+        SELECT DISTINCT MSISDN FROM SA_TBL_ATL_BASE_INFER_01
     ) B
       ON A.MSISDN = B.MSISDN
     WHERE A.JOINING_DATE < '{DP.joining_date_cutoff}'
@@ -255,9 +255,9 @@ STATEMENTS: List[str] = [
     # =========================
     # Inference Base – T-2
     # =========================
-    "DROP TABLE SA_TBL_ATL_BASE_INFER_03_TEST PURGE",
+    "DROP TABLE SA_TBL_ATL_BASE_INFER_03 PURGE",
     f"""
-    CREATE TABLE SA_TBL_ATL_BASE_INFER_03_TEST
+    CREATE TABLE SA_TBL_ATL_BASE_INFER_03
     COMPRESS FOR QUERY HIGH AS
     SELECT /*+ PARALLEL(8) */
            A.MSISDN AS MSISDN_2,
@@ -273,7 +273,7 @@ STATEMENTS: List[str] = [
            DATAREV_TRIG AS DATAREV_TRIG_2
     FROM gpbi_marketing.gpbi_mstr_detail_info PARTITION({DP.part_t_2}) A
     INNER JOIN (
-        SELECT MSISDN FROM SA_TBL_ATL_BASE_INFER_01_TEST
+        SELECT MSISDN FROM SA_TBL_ATL_BASE_INFER_01
     ) B
       ON A.MSISDN = B.MSISDN
     WHERE A.JOINING_DATE < '{DP.joining_date_cutoff}'

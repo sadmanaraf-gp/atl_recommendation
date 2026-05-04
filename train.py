@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import ModelCheckpoint
+import gzip
 
 import os
 from dotenv import load_dotenv
@@ -34,15 +35,18 @@ def main():
     # 1. Load and process data
     # This step can be slow. For faster iteration, we save the processed file.
     try:
-        base = pd.read_pickle('data/processed_base.pkl')
-        print("Loaded processed data from cache.")
+        with gzip.open('data/processed_base.gz', 'rb') as f:
+            base = pickle.load(f)
+        print("Loaded processed data")
     except FileNotFoundError:
         print("Processed data cache not found. Loading from source...")
-        base, _ = load_and_process_data(db_config, infer=False)
+        base = load_and_process_data(db_config, infer=False)
         if base is None:
             return
-        base.to_pickle('data/processed_base.pkl')
-        print("Saved processed data to data/processed_base.pkl")
+
+        with gzip.open('data/processed_base.gz', 'wb') as f:
+            pickle.dump(base, f, protocol=4)
+        print("Saved processed data to data/processed_base.gz")
 
     # 2. Prepare data for Taker model
     print("Preparing data for 'Taker' model...")

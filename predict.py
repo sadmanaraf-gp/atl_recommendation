@@ -54,16 +54,16 @@ def main():
 
     # 1. Load inference data
     try:
-        with gzip.open('data/processed_base_infer.gz', 'rb') as f:
+        with gzip.open('/home/jovyan/reco/ATL Recommendation/data/processed_base_infer.gz', 'rb') as f:
             base_infer = pickle.load(f)
         print("Loaded inference data from cache.")
     except FileNotFoundError:
         print("Inference data cache not found. Loading from source...")
-        base_infer, _ = load_and_process_data(db_config, infer=True)
+        base_infer = load_and_process_data(db_config, infer=True)
         if base_infer is None:
             return
         os.makedirs('data', exist_ok=True)
-        with gzip.open('data/processed_base_infer.gz', 'wb') as f:
+        with gzip.open('/home/jovyan/reco/ATL Recommendation/data/processed_base_infer.gz', 'wb') as f:
             pickle.dump(base_infer, f, protocol=4)
         print("Saved processed inference data to data/processed_base_infer.gz")
 
@@ -191,7 +191,7 @@ def main():
     # Use the shared utility to export to Oracle
     export_to_oracle(
         df=base_pred,
-        table_name="TBL_ATL_PRED_202601_SAMPLE",
+        table_name=FINAL_TABLE,
         user=db_config["user"],
         password=db_config["password"],
         dsn=db_config["dsn"],

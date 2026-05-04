@@ -43,6 +43,11 @@ def preprocess_data(base_df, infer=False):
         df[name] = (df[column_1[index]] - df[column_2[index]]).fillna(
             df[column_1[index]].fillna(0)
         )
+    
+    # Fill NaNs
+    if df.isnull().values.any():
+        print("NaNs found in data. Filling with 0 to prevent propogation to loss.")
+        df.fillna(0, inplace=True)
 
     label_le = None
     if not infer:
@@ -52,12 +57,8 @@ def preprocess_data(base_df, infer=False):
         # Rank in terms of pack rev to make distinct transaction
         df['pack_rank'] = df.groupby(['msisdn'])['hit'].rank(method="first", ascending=False)
         df = df.astype({"pack_rank": int})
-
-    # Fill NaNs
-    for i in df.columns[df.isnull().any(axis=0)]:
-        df[i].fillna(0, inplace=True)
         
-    return df, label_le
+    return df
 
 def load_and_process_data(db_config, infer=False):
     """Loads data from Oracle and processes it."""
@@ -96,6 +97,6 @@ def load_and_process_data(db_config, infer=False):
             pickle.dump(base, f, protocol=4)
     
     print("Preprocessing data...")
-    processed_df, label_encoder = preprocess_data(base, infer=infer)
+    processed_df = preprocess_data(base, infer=infer)
     
-    return processed_df, label_encoder
+    return processed_df

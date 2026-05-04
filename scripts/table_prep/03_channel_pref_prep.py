@@ -117,9 +117,9 @@ STATEMENTS: List[str] = [
     # -------------------------
     # Stage 3: Final Preference
     # -------------------------
-    "DROP TABLE TBL_CHANNEL_PREFERENCE_FINAL_TEST PURGE",
+    "DROP TABLE TBL_CHANNEL_PREFERENCE_FINAL PURGE",
     """
-    CREATE TABLE TBL_CHANNEL_PREFERENCE_FINAL_TEST
+    CREATE TABLE TBL_CHANNEL_PREFERENCE_FINAL
     COMPRESS FOR ARCHIVE HIGH AS
     SELECT /*+ PARALLEL(8) */
            A.*
