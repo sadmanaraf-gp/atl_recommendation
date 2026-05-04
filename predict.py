@@ -25,21 +25,21 @@ def run_inference(model, scaler, data, features, batch_size: int = 20000000):
     data_scaled = scaler.transform(data[features])
 
     start_pos = 0
-    batch_size = batch_size
     max_size = len(data)
-    predictions = np.empty((0, N_CLASSES), int)
+    prediction_batches = []
 
     print('Prediction generation started...')
     while start_pos < max_size:
         print(f'Generating from {start_pos} to {start_pos + batch_size}')
         batch_data = data_scaled[start_pos:start_pos + batch_size]
         pred_batch = model.predict(batch_data)
-        predictions = np.vstack([predictions, pred_batch])
+        prediction_batches.append(pred_batch)
         start_pos += batch_size
 
-    for index,name in enumerate(class_names):
-        print('Predicting for:', index)
-        data[name] = predictions[:,index]
+    predictions = np.concatenate(prediction_batches, axis=0)
+
+    for index, name in enumerate(class_names):
+        data[name] = predictions[:, index]
 
     return data
 
@@ -54,7 +54,7 @@ def main():
 
     # 1. Load inference data
     try:
-        with gzip.open('/home/jovyan/reco/ATL Recommendation/data/processed_base_infer.gz', 'rb') as f:
+        with gzip.open('data/processed_base_infer.gz', 'rb') as f:
             base_infer = pickle.load(f)
         print("Loaded inference data from cache.")
     except FileNotFoundError:
@@ -63,7 +63,7 @@ def main():
         if base_infer is None:
             return
         os.makedirs('data', exist_ok=True)
-        with gzip.open('/home/jovyan/reco/ATL Recommendation/data/processed_base_infer.gz', 'wb') as f:
+        with gzip.open('data/processed_base_infer.gz', 'wb') as f:
             pickle.dump(base_infer, f, protocol=4)
         print("Saved processed inference data to data/processed_base_infer.gz")
 
