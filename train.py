@@ -15,7 +15,8 @@ load_dotenv()
 
 from scripts.data_processing import load_and_process_data
 from scripts.model import build_model
-from scripts.config import TAKER_FEATURES, NONTAKER_FEATURES, TARGET, EPOCHS, BATCH_SIZE, VALIDATION_SPLIT
+from scripts.evaluate import evaluate_model, save_evaluation
+from scripts.config import TAKER_FEATURES, NONTAKER_FEATURES, TARGET, EPOCHS, BATCH_SIZE, VALIDATION_SPLIT, N_CLASSES
 import warnings
 warnings.filterwarnings(
     "ignore",
@@ -26,6 +27,9 @@ warnings.filterwarnings(
 
 def main():
     """Main function to run the training pipeline."""
+    os.makedirs('artifacts', exist_ok=True)
+    os.makedirs('data', exist_ok=True)
+    
     db_config = {
         "user": os.getenv("ORACLE_USER"),
         "password": os.getenv("ORACLE_PASSWORD"),
@@ -50,6 +54,15 @@ def main():
 
     # 2. Prepare data for Taker model
     print("Preparing data for 'Taker' model...")
+    
+    # Validate N_CLASSES matches actual label count
+    n_unique_labels = base['label'].nunique()
+    assert n_unique_labels == N_CLASSES, (
+        f"N_CLASSES mismatch: config says {N_CLASSES} but data has {n_unique_labels} unique labels. "
+        f"Update config.py (N_CLASSES and class_names) to match current pack universe."
+    )
+    print(f"Label validation passed: {n_unique_labels} classes confirmed.")
+    
     base['label_one_hot'] = list(to_categorical(base['label']))
     
     # Sampling and splitting
@@ -80,7 +93,7 @@ def main():
         save_best_only=True
     )
 
-    train_y_tensor = tf.convert_to_tensor(np.array(train_y.values.tolist()), dtype=tf.float16)
+    train_y_tensor = tf.convert_to_tensor(np.array(train_y.values.tolist()), dtype=tf.float32)
     
     model_taker.fit(
         train_x_scaled,
@@ -95,9 +108,16 @@ def main():
 
     # 4. Prepare and Train Non-Taker model (logic is similar)
     print("\nPreparing and training 'Non-Taker' model...")
-    # The notebook re-samples the entire base for the non-taker model.
-    base_sample_non_taker = base.sample(frac=1, random_state=111)
-    train_ind_nt, _ = train_test_split(base_sample_non_taker.index, test_size=0.3, random_state=123)
+    # Filter to non-taker subscribers only (those who don't have a top pack purchase)
+    taker_msisdns = base[base.pack_rank == 1]['msisdn'].unique()
+    base_non_taker = base[~base['msisdn'].isin(taker_msisdns)].copy()
+    if len(base_non_taker) == 0:
+        # Fallback: if all subscribers have pack_rank==1, use subscribers with low hit counts
+        print("WARNING: No pure non-takers found. Using subscribers with pack_rank > 1 as proxy.")
+        base_non_taker = base[base.pack_rank > 1].copy()
+    
+    base_sample_non_taker = base_non_taker.sample(frac=1, random_state=111)
+    train_ind_nt, test_ind_nt = train_test_split(base_sample_non_taker.index, test_size=0.3, random_state=123)
     
     train_x_nt = base_sample_non_taker.loc[train_ind_nt, NONTAKER_FEATURES].astype(np.float32)
     train_y_nt = base_sample_non_taker.loc[train_ind_nt, 'label_one_hot']
@@ -119,7 +139,7 @@ def main():
         save_best_only=True
     )
     
-    train_y_tensor_nt = tf.convert_to_tensor(np.array(train_y_nt.values.tolist()), dtype=tf.float16)
+    train_y_tensor_nt = tf.convert_to_tensor(np.array(train_y_nt.values.tolist()), dtype=tf.float32)
 
     model_non_taker.fit(
         train_x_scaled_nt,
@@ -131,6 +151,33 @@ def main():
         callbacks=[checkpointer_nt]
     )
     print("Non-Taker model training complete. Best model saved to artifacts/atl_reco_non_taker.h5")
+
+    # 5. Evaluate both models on held-out test sets
+    print("\n" + "="*60)
+    print("EVALUATION PHASE")
+    print("="*60)
+    
+    # Evaluate Taker model
+    model_taker.load_weights('artifacts/atl_reco_taker.h5')  # Load best checkpoint
+    test_x = base_sample.loc[test_ind, TAKER_FEATURES].astype(np.float32)
+    test_x_scaled = sc.transform(test_x)
+    test_y_true = base_sample.loc[test_ind, 'label'].values
+    
+    test_pred_proba = model_taker.predict(test_x_scaled)
+    taker_metrics = evaluate_model(test_y_true, test_pred_proba, model_name="Taker")
+    
+    # Evaluate Non-Taker model
+    model_non_taker.load_weights('artifacts/atl_reco_non_taker.h5')  # Load best checkpoint
+    test_x_nt = base_sample_non_taker.loc[test_ind_nt, NONTAKER_FEATURES].astype(np.float32)
+    test_x_scaled_nt = sc_non_taker.transform(test_x_nt)
+    test_y_true_nt = base_sample_non_taker.loc[test_ind_nt, 'label'].values
+    
+    test_pred_proba_nt = model_non_taker.predict(test_x_scaled_nt)
+    non_taker_metrics = evaluate_model(test_y_true_nt, test_pred_proba_nt, model_name="Non-Taker")
+    
+    # Save all metrics
+    save_evaluation([taker_metrics, non_taker_metrics])
+    print("Training and evaluation pipeline complete.")
 
 if __name__ == '__main__':
     main()

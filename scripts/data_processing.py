@@ -23,9 +23,29 @@ def preprocess_data(base_df, infer=False):
     df = pd.get_dummies(df, columns=['circle','region','rchg_chnl'])
     df.columns = df.columns.str.lower()
 
-    # Remove outliers
-    df = df[df["recharge_amount"] <= df["recharge_amount"].quantile(0.98)]
-    df = df[df["total_dstr"] <= df["total_dstr"].quantile(0.99)]
+    # Outlier handling
+    if not infer:
+        # During training: remove outliers and save thresholds
+        rchg_cap = df["recharge_amount"].quantile(0.98)
+        dstr_cap = df["total_dstr"].quantile(0.99)
+        # Save thresholds for inference clipping
+        import json
+        os.makedirs('artifacts', exist_ok=True)
+        with open('artifacts/outlier_thresholds.json', 'w') as f:
+            json.dump({"recharge_amount_cap": float(rchg_cap), "total_dstr_cap": float(dstr_cap)}, f)
+        df = df[df["recharge_amount"] <= rchg_cap]
+        df = df[df["total_dstr"] <= dstr_cap]
+    else:
+        # During inference: clip to training thresholds (don't drop subscribers)
+        import json
+        try:
+            with open('artifacts/outlier_thresholds.json', 'r') as f:
+                thresholds = json.load(f)
+            df["recharge_amount"] = df["recharge_amount"].clip(upper=thresholds["recharge_amount_cap"])
+            df["total_dstr"] = df["total_dstr"].clip(upper=thresholds["total_dstr_cap"])
+        except FileNotFoundError:
+            print("WARNING: outlier_thresholds.json not found. Skipping outlier clipping at inference.")
+
 
 
 
@@ -54,6 +74,13 @@ def preprocess_data(base_df, infer=False):
         # Label encoding only during training
         label_le = preprocessing.LabelEncoder()
         df['label'] = label_le.fit_transform(df['amount'])
+        
+        # Persist label encoder for inference consistency
+        os.makedirs('artifacts', exist_ok=True)
+        with open('artifacts/label_encoder.pkl', 'wb') as f:
+            pickle.dump(label_le, f)
+        print(f"LabelEncoder saved ({len(label_le.classes_)} classes): {list(label_le.classes_)}")
+        
         # Rank in terms of pack rev to make distinct transaction
         df['pack_rank'] = df.groupby(['msisdn'])['hit'].rank(method="first", ascending=False)
         df = df.astype({"pack_rank": int})
@@ -83,7 +110,7 @@ def load_and_process_data(db_config, infer=False):
         
         if base1 is None or base2 is None or base3 is None:
             print("Failed to load one or more tables. Aborting.")
-            return None, None
+            return None
 
         base1['MSISDN'] = base1['MSISDN'].astype(int)
         base2['MSISDN_1'] = base2['MSISDN_1'].astype(int)
@@ -98,5 +125,25 @@ def load_and_process_data(db_config, infer=False):
     
     print("Preprocessing data...")
     processed_df = preprocess_data(base, infer=infer)
+    
+    # Data quality checks
+    if processed_df is None or len(processed_df) == 0:
+        print("ERROR: Preprocessing returned empty DataFrame.")
+        return None
+    
+    print(f"  Processed rows: {len(processed_df):,}")
+    
+    # Validate expected features exist
+    expected_features = cfg.TAKER_FEATURES if not infer else cfg.NONTAKER_FEATURES
+    missing_cols = [c for c in expected_features if c not in processed_df.columns]
+    if missing_cols:
+        print(f"  WARNING: Missing expected columns: {missing_cols}")
+    
+    # Label distribution summary (training only)
+    if not infer and 'label' in processed_df.columns:
+        label_counts = processed_df['label'].value_counts()
+        print(f"  Label classes: {label_counts.nunique()}")
+        print(f"  Most common class: label={label_counts.index[0]} ({label_counts.iloc[0]:,} samples, {label_counts.iloc[0]/len(processed_df)*100:.1f}%)")
+        print(f"  Least common class: label={label_counts.index[-1]} ({label_counts.iloc[-1]:,} samples, {label_counts.iloc[-1]/len(processed_df)*100:.1f}%)")
     
     return processed_df

@@ -30,7 +30,7 @@ TAKER_FEATURES = ['total_dstr', 'voicerev_total', 'datarev_total',
        'voicerev_trig_2', 'datarev_trig_2','recharge_max_1', 'recharge_max_2',
        'dstr_change_01', 'mou_change_01', 'vol_change_01', 'dstr_change_12',
        'mou_change_12', 'vol_change_12','amount1','amount2','amount3','amount4','amount5','amount6','amount7','amount8',
-        'srvc1', 'srvc2', 'srvc3', 'srvc4', 'srvc5', 'srvc6', 'srvc7', 'srvc8', 'srvc8','circle_chittagong','circle_dhaka',
+        'srvc1', 'srvc2', 'srvc3', 'srvc4', 'srvc5', 'srvc6', 'srvc7', 'srvc8','circle_chittagong','circle_dhaka',
        'circle_khulna','circle_mymensingh','circle_rajshahi','circle_sylhet','circle_unknown','rchg_chnl_01. freq_retail_only',
        'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only',
        'rchg_chnl_unknown']
