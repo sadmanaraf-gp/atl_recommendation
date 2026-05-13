@@ -4,8 +4,9 @@ import pickle
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils.class_weight import compute_class_weight
 from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 import gzip
 
 import os
@@ -14,15 +15,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from scripts.data_processing import load_and_process_data
-from scripts.model import build_model
+from scripts.model import build_model, focal_loss
 from scripts.evaluate import evaluate_model, save_evaluation
-from scripts.config import TAKER_FEATURES, NONTAKER_FEATURES, TARGET, EPOCHS, BATCH_SIZE, VALIDATION_SPLIT, N_CLASSES
+from scripts.config import (TAKER_FEATURES, NONTAKER_FEATURES, TARGET, EPOCHS, BATCH_SIZE,
+                            VALIDATION_SPLIT, N_CLASSES, USE_FOCAL_LOSS, FOCAL_LOSS_GAMMA,
+                            FOCAL_LOSS_ALPHA, LABEL_SMOOTHING, NONTAKER_HIT_QUANTILE)
 import warnings
 warnings.filterwarnings(
     "ignore",
     message=".*np.object.*FutureWarning.*",
     category=FutureWarning,
 )
+
+# Select loss function based on config
+if USE_FOCAL_LOSS:
+    LOSS_FN = focal_loss(gamma=FOCAL_LOSS_GAMMA, alpha=FOCAL_LOSS_ALPHA)
+    print(f"Using FOCAL LOSS (gamma={FOCAL_LOSS_GAMMA}, alpha={FOCAL_LOSS_ALPHA})")
+else:
+    LOSS_FN = tf.keras.losses.CategoricalCrossentropy(label_smoothing=LABEL_SMOOTHING)
+    print(f"Using CATEGORICAL CROSSENTROPY with label_smoothing={LABEL_SMOOTHING}")
 
 
 def main():
@@ -84,7 +95,13 @@ def main():
     # 3. Train Taker model
     print("Training 'Taker' model...")
     model_taker = build_model(input_shape=len(TAKER_FEATURES))
-    model_taker.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model_taker.compile(optimizer='adam', loss=LOSS_FN, metrics=['accuracy'])
+    
+    # Compute class weights to counter imbalance
+    train_labels = base_sample.loc[train_ind, 'label'].values
+    cw = compute_class_weight('balanced', classes=np.arange(N_CLASSES), y=train_labels)
+    class_weight_dict = dict(enumerate(cw))
+    print(f"  Class weight range: {cw.min():.4f} – {cw.max():.4f}")
     
     checkpointer = ModelCheckpoint(
         filepath='artifacts/atl_reco_taker.h5',
@@ -92,6 +109,8 @@ def main():
         verbose=1,
         save_best_only=True
     )
+    lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6, verbose=1)
+    early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
     train_y_tensor = tf.convert_to_tensor(np.array(train_y.values.tolist()), dtype=tf.float32)
     
@@ -102,19 +121,23 @@ def main():
         batch_size=BATCH_SIZE,
         verbose=1,
         validation_split=VALIDATION_SPLIT,
-        callbacks=[checkpointer]
+        callbacks=[checkpointer, lr_scheduler, early_stop],
+        class_weight=class_weight_dict
     )
     print("Taker model training complete. Best model saved to artifacts/atl_reco_taker.h5")
 
-    # 4. Prepare and Train Non-Taker model (logic is similar)
+    # 4. Prepare and Train Non-Taker model
     print("\nPreparing and training 'Non-Taker' model...")
-    # Filter to non-taker subscribers only (those who don't have a top pack purchase)
-    taker_msisdns = base[base.pack_rank == 1]['msisdn'].unique()
-    base_non_taker = base[~base['msisdn'].isin(taker_msisdns)].copy()
-    if len(base_non_taker) == 0:
-        # Fallback: if all subscribers have pack_rank==1, use subscribers with low hit counts
-        print("WARNING: No pure non-takers found. Using subscribers with pack_rank > 1 as proxy.")
-        base_non_taker = base[base.pack_rank > 1].copy()
+    # Fix: Use low-engagement subscribers (bottom 30% by total hit count) as non-taker proxy.
+    # The original split was broken because every msisdn in the training data has pack_rank==1
+    # (the SQL pipeline only includes pack takers). Using low-engagement takers as a proxy
+    # gives the non-taker model a population whose behavior is closer to actual non-takers.
+    msisdn_hit_counts = base.groupby('msisdn')['hit'].sum()
+    hit_threshold = msisdn_hit_counts.quantile(NONTAKER_HIT_QUANTILE)
+    low_engagement_msisdns = msisdn_hit_counts[msisdn_hit_counts <= hit_threshold].index
+    base_non_taker = base[(base['msisdn'].isin(low_engagement_msisdns)) & (base.pack_rank == 1)].copy()
+    print(f"  Non-Taker proxy: {base_non_taker['msisdn'].nunique():,} low-engagement subscribers "
+          f"(hit <= {hit_threshold:.0f}, bottom {NONTAKER_HIT_QUANTILE*100:.0f}%)")
     
     base_sample_non_taker = base_non_taker.sample(frac=1, random_state=111)
     train_ind_nt, test_ind_nt = train_test_split(base_sample_non_taker.index, test_size=0.3, random_state=123)
@@ -130,7 +153,13 @@ def main():
     print("Non-Taker scaler saved to artifacts/atl_scaler_non_taker.pkl")
 
     model_non_taker = build_model(input_shape=len(NONTAKER_FEATURES))
-    model_non_taker.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model_non_taker.compile(optimizer='adam', loss=LOSS_FN, metrics=['accuracy'])
+    
+    # Compute class weights for non-taker population
+    train_labels_nt = base_sample_non_taker.loc[train_ind_nt, 'label'].values
+    cw_nt = compute_class_weight('balanced', classes=np.arange(N_CLASSES), y=train_labels_nt)
+    class_weight_dict_nt = dict(enumerate(cw_nt))
+    print(f"  Non-Taker class weight range: {cw_nt.min():.4f} – {cw_nt.max():.4f}")
     
     checkpointer_nt = ModelCheckpoint(
         filepath='artifacts/atl_reco_non_taker.h5',
@@ -138,6 +167,8 @@ def main():
         verbose=1,
         save_best_only=True
     )
+    lr_scheduler_nt = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6, verbose=1)
+    early_stop_nt = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
     
     train_y_tensor_nt = tf.convert_to_tensor(np.array(train_y_nt.values.tolist()), dtype=tf.float32)
 
@@ -148,7 +179,8 @@ def main():
         batch_size=BATCH_SIZE,
         verbose=1,
         validation_split=VALIDATION_SPLIT,
-        callbacks=[checkpointer_nt]
+        callbacks=[checkpointer_nt, lr_scheduler_nt, early_stop_nt],
+        class_weight=class_weight_dict_nt
     )
     print("Non-Taker model training complete. Best model saved to artifacts/atl_reco_non_taker.h5")
 

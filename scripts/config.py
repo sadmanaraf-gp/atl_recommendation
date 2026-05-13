@@ -66,6 +66,15 @@ TAKER_PROB_CUTOFF = 0.05
 NONTAKER_PROB_CUTOFF = 0.03
 PACK_NO = 5
 
+# Loss function: set USE_FOCAL_LOSS=True for focal loss, False for label-smoothed crossentropy
+USE_FOCAL_LOSS = True
+FOCAL_LOSS_GAMMA = 2.0
+FOCAL_LOSS_ALPHA = 0.25
+LABEL_SMOOTHING = 0.1  # used only when USE_FOCAL_LOSS=False
+
+# Non-taker proxy: bottom N% of subscribers by hit count
+NONTAKER_HIT_QUANTILE = 0.3
+
 # Oracle table names
 TABLE_BASE_01 = "SA_TBL_ATL_BASE_01"
 TABLE_BASE_02 = "SA_TBL_ATL_BASE_02"
