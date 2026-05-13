@@ -19,7 +19,8 @@ from scripts.model import build_model, focal_loss
 from scripts.evaluate import evaluate_model, save_evaluation
 from scripts.config import (TAKER_FEATURES, NONTAKER_FEATURES, TARGET, EPOCHS, BATCH_SIZE,
                             VALIDATION_SPLIT, N_CLASSES, USE_FOCAL_LOSS, FOCAL_LOSS_GAMMA,
-                            FOCAL_LOSS_ALPHA, LABEL_SMOOTHING, NONTAKER_HIT_QUANTILE)
+                            FOCAL_LOSS_ALPHA, LABEL_SMOOTHING, NONTAKER_HIT_QUANTILE,
+                            CLASS_WEIGHT_MODE)
 import warnings
 warnings.filterwarnings(
     "ignore",
@@ -97,11 +98,15 @@ def main():
     model_taker = build_model(input_shape=len(TAKER_FEATURES))
     model_taker.compile(optimizer='adam', loss=LOSS_FN, metrics=['accuracy'])
     
-    # Compute class weights to counter imbalance
+    # Compute class weights to counter imbalance (dampened to avoid over-correction)
     train_labels = base_sample.loc[train_ind, 'label'].values
     cw = compute_class_weight('balanced', classes=np.arange(N_CLASSES), y=train_labels)
+    if CLASS_WEIGHT_MODE == 'sqrt':
+        cw = np.sqrt(cw)
+    elif CLASS_WEIGHT_MODE == 'none':
+        cw = np.ones_like(cw)
     class_weight_dict = dict(enumerate(cw))
-    print(f"  Class weight range: {cw.min():.4f} – {cw.max():.4f}")
+    print(f"  Class weight mode: {CLASS_WEIGHT_MODE}, range: {cw.min():.4f} – {cw.max():.4f}")
     
     checkpointer = ModelCheckpoint(
         filepath='artifacts/atl_reco_taker.h5',
@@ -155,11 +160,15 @@ def main():
     model_non_taker = build_model(input_shape=len(NONTAKER_FEATURES))
     model_non_taker.compile(optimizer='adam', loss=LOSS_FN, metrics=['accuracy'])
     
-    # Compute class weights for non-taker population
+    # Compute class weights for non-taker population (dampened to avoid over-correction)
     train_labels_nt = base_sample_non_taker.loc[train_ind_nt, 'label'].values
     cw_nt = compute_class_weight('balanced', classes=np.arange(N_CLASSES), y=train_labels_nt)
+    if CLASS_WEIGHT_MODE == 'sqrt':
+        cw_nt = np.sqrt(cw_nt)
+    elif CLASS_WEIGHT_MODE == 'none':
+        cw_nt = np.ones_like(cw_nt)
     class_weight_dict_nt = dict(enumerate(cw_nt))
-    print(f"  Non-Taker class weight range: {cw_nt.min():.4f} – {cw_nt.max():.4f}")
+    print(f"  Non-Taker class weight mode: {CLASS_WEIGHT_MODE}, range: {cw_nt.min():.4f} – {cw_nt.max():.4f}")
     
     checkpointer_nt = ModelCheckpoint(
         filepath='artifacts/atl_reco_non_taker.h5',

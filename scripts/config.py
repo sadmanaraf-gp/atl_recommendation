@@ -68,9 +68,10 @@ PACK_NO = 5
 
 # Loss function: set USE_FOCAL_LOSS=True for focal loss, False for label-smoothed crossentropy
 USE_FOCAL_LOSS = True
-FOCAL_LOSS_GAMMA = 2.0
+FOCAL_LOSS_GAMMA = 1.0
 FOCAL_LOSS_ALPHA = 0.25
 LABEL_SMOOTHING = 0.1  # used only when USE_FOCAL_LOSS=False
+CLASS_WEIGHT_MODE = 'sqrt'
 
 # Non-taker proxy: bottom N% of subscribers by hit count
 NONTAKER_HIT_QUANTILE = 0.3
