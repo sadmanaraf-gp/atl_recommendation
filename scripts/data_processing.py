@@ -11,6 +11,7 @@ from scripts import config as cfg
 import os
 import gzip
 import pickle
+import numpy as np
 
 def preprocess_data(base_df, infer=False):
     """
@@ -74,6 +75,7 @@ def preprocess_data(base_df, infer=False):
         # Label encoding only during training
         label_le = preprocessing.LabelEncoder()
         df['label'] = label_le.fit_transform(df['amount'])
+        df['label'] = df['label'].astype(np.int8)
         
         # Persist label encoder for inference consistency
         os.makedirs('artifacts', exist_ok=True)
@@ -84,6 +86,9 @@ def preprocess_data(base_df, infer=False):
         # Rank in terms of pack rev to make distinct transaction
         df['pack_rank'] = df.groupby(['msisdn'])['hit'].rank(method="first", ascending=False)
         df = df.astype({"pack_rank": int})
+
+        for col in df.select_dtypes(include=['float64']).columns:
+            df[col] = df[col].astype(np.float32)
         
     return df
 

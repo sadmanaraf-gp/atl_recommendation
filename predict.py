@@ -22,7 +22,7 @@ load_dotenv()
 
 def run_inference(model, scaler, data, features, batch_size: int = 20000000):
     """Scales data and runs model prediction in batches."""
-    data_scaled = scaler.transform(data[features])
+    data_scaled = scaler.transform(data[features]).astype(np.float32)
 
     start_pos = 0
     max_size = len(data)
@@ -42,6 +42,47 @@ def run_inference(model, scaler, data, features, batch_size: int = 20000000):
         data[name] = predictions[:, index]
 
     return data
+
+
+def extract_top_k(predictions_df, prob_cutoff, top_k, taker_flag):
+    """Extract top-K predictions per subscriber using vectorized numpy operations.
+    Avoids expensive melt + groupby.rank on billion-row DataFrames."""
+    msisdns = predictions_df['msisdn'].values
+    pred_matrix = predictions_df[class_names].values.astype(np.float32)
+    class_arr = np.array(class_names)
+
+    # Get top-K indices per row using argpartition (O(n) per row vs O(n log n) for full sort)
+    k = min(top_k, pred_matrix.shape[1])
+    top_k_indices = np.argpartition(pred_matrix, -k, axis=1)[:, -k:]
+
+    # Gather corresponding probabilities
+    row_idx = np.arange(len(msisdns))[:, None]
+    top_k_probs = pred_matrix[row_idx, top_k_indices]
+
+    # Sort within top-K (descending) for proper ranking
+    sort_order = np.argsort(-top_k_probs, axis=1)
+    top_k_indices = np.take_along_axis(top_k_indices, sort_order, axis=1)
+    top_k_probs = np.take_along_axis(top_k_probs, sort_order, axis=1)
+
+    # Flatten into DataFrame
+    n_subs = len(msisdns)
+    msisdn_rep = np.repeat(msisdns, k)
+    deno_flat = class_arr[top_k_indices.ravel()]
+    prob_flat = top_k_probs.ravel()
+    rank_flat = np.tile(np.arange(1, k + 1), n_subs)
+
+    result = pd.DataFrame({
+        'msisdn': msisdn_rep,
+        'deno': deno_flat,
+        'prob': prob_flat,
+        'rank': rank_flat
+    })
+
+    # Apply probability cutoff
+    result = result[result['prob'] > prob_cutoff]
+    result['taker_flag'] = taker_flag
+
+    return result
 
 
 def main():
@@ -126,34 +167,17 @@ def main():
 
         print("Inference complete. Predictions available in 'data/'.")
 
-
-        taker_predictions[class_names] = taker_predictions[class_names].astype('float32')
-        nontaker_predictions[class_names] = nontaker_predictions[class_names].astype('float32')
-
-        mpb_taker = taker_predictions.melt(id_vars = 'msisdn', value_vars = class_names, var_name = 'deno', value_name = 'prob')
-        mpb_non_taker = nontaker_predictions.melt(id_vars = 'msisdn', value_vars = class_names, var_name = 'deno', value_name = 'prob')
-
-        mpb_taker = mpb_taker[mpb_taker['prob']>TAKER_PROB_CUTOFF]
-        mpb_non_taker = mpb_non_taker[mpb_non_taker['prob']>NONTAKER_PROB_CUTOFF]
-
-        mpb_taker['rank'] = (mpb_taker.groupby('msisdn')['prob'].rank(method="first",ascending = False))
-        mpb_taker = mpb_taker.astype({"rank": int})
-
-        mpb_non_taker['rank'] = (mpb_non_taker.groupby('msisdn')['prob'].rank(method="first",ascending = False))
-        mpb_non_taker = mpb_non_taker.astype({"rank": int})
-
         taker_base_path = 'data/base_taker_pred.gz'
         nontaker_base_path = 'data/base_nontaker_pred.gz'
 
-        # Load if exists, otherwise compute and save
+        # Extract top-K predictions using vectorized numpy (avoids billion-row melt)
         if os.path.exists(taker_base_path):
             print(f"Base taker pred already exist at {taker_base_path}. Loading...")
             with gzip.open(taker_base_path, 'rb') as f:
                 base_taker_pred = pickle.load(f)
         else:
-            print("Base taker pred not found. Computing...")
-            base_taker_pred = mpb_taker[mpb_taker['rank'] <= PACK_NO]
-            base_taker_pred['taker_flag'] = 1       
+            print("Base taker pred not found. Computing top-K...")
+            base_taker_pred = extract_top_k(taker_predictions, TAKER_PROB_CUTOFF, PACK_NO, taker_flag=1)
             os.makedirs('data', exist_ok=True)
             with gzip.open(taker_base_path, 'wb', compresslevel=4) as f:
                 pickle.dump(base_taker_pred, f, protocol=4)
@@ -164,9 +188,8 @@ def main():
             with gzip.open(nontaker_base_path, 'rb') as f:
                 base_nontaker_pred = pickle.load(f)
         else:
-            print("Base non-taker pred not found. Computing...")
-            base_nontaker_pred = mpb_non_taker[mpb_non_taker['rank'] <= 5]
-            base_nontaker_pred['taker_flag'] = 0
+            print("Base non-taker pred not found. Computing top-K...")
+            base_nontaker_pred = extract_top_k(nontaker_predictions, NONTAKER_PROB_CUTOFF, PACK_NO, taker_flag=0)
             os.makedirs('data', exist_ok=True)
             with gzip.open(nontaker_base_path, 'wb', compresslevel=4) as f:
                 pickle.dump(base_nontaker_pred, f, protocol=4)
