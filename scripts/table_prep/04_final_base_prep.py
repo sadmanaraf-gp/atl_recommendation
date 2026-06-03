@@ -118,57 +118,59 @@ STATEMENTS: List[str] = [
     CREATE TABLE TBL_ATL_PREDICTION_{PM}_UPSELL
     COMPRESS FOR ARCHIVE HIGH AS
     SELECT MSISDN,
-           CASE
-            WHEN 	DENO	=	98	THEN	108
-            WHEN 	DENO	=	108	THEN	308
-            WHEN 	DENO	=	308	THEN	148
-            WHEN 	DENO	=	148	THEN	118
-            WHEN 	DENO	=	118	THEN	179
-            WHEN 	DENO	=	179	THEN	198
-            WHEN 	DENO	=	198	THEN	499
-            WHEN 	DENO	=	499	THEN	219
-            WHEN 	DENO	=	219	THEN	249
-            WHEN 	DENO	=	249	THEN	399
-            WHEN 	DENO	=	399	THEN	599
-            WHEN 	DENO	=	599	THEN	698
-            WHEN 	DENO	=	698	THEN	649
-            WHEN 	DENO	=	649	THEN	798
-            WHEN 	DENO	=	798	THEN	898
-            WHEN 	DENO	=	898	THEN	899
-                                
-            WHEN 	DENO	=	19	THEN	29
-            WHEN 	DENO	=	29	THEN	39
-            WHEN 	DENO	=	39	THEN	49
-            WHEN 	DENO	=	49	THEN	68
-            WHEN 	DENO	=	68	THEN	99
-            WHEN 	DENO	=	99	THEN	228
-            WHEN 	DENO	=	228	THEN	119
-            WHEN 	DENO	=	119	THEN	139
-            WHEN 	DENO	=	139	THEN	158
-            WHEN 	DENO	=	158	THEN	197
-            WHEN 	DENO	=	197	THEN	268
-            WHEN 	DENO	=	268	THEN	279
-            WHEN 	DENO	=	279	THEN	319
-            WHEN 	DENO	=	319	THEN	419
-            WHEN 	DENO	=	419	THEN	519
-            WHEN 	DENO	=	519	THEN	639
-            WHEN 	DENO	=	639	THEN	729
-                                
-            WHEN 	DENO	=	59	THEN	89
-            WHEN 	DENO	=	89	THEN	107
-            WHEN 	DENO	=	107	THEN	129
-            WHEN 	DENO	=	129	THEN	208
-            WHEN 	DENO	=	208	THEN	309
-                                
-            WHEN 	DENO	=	217	THEN	398
-            WHEN 	DENO	=	398	THEN	258
-            WHEN 	DENO	=	258	THEN	498
-            WHEN 	DENO	=	498	THEN	598
-            WHEN 	DENO	=	598	THEN	699
-            WHEN 	DENO	=	699	THEN	818
-            WHEN 	DENO	=	818	THEN	999
-            WHEN 	DENO	=	999	THEN	1099
-            WHEN 	DENO	=	1099	THEN	1199
+    CASE	WHEN	DENO	=	98	THEN	118
+        WHEN	DENO	=	118	THEN	148
+        WHEN	DENO	=	148	THEN	179
+        WHEN	DENO	=	179	THEN	198
+        WHEN	DENO	=	198	THEN	219
+        WHEN	DENO	=	219	THEN	249
+        WHEN	DENO	=	249	THEN	308
+        WHEN	DENO	=	308	THEN	399
+        WHEN	DENO	=	399	THEN	499
+        WHEN	DENO	=	499	THEN	599
+        WHEN	DENO	=	599	THEN	649
+        WHEN	DENO	=	649	THEN	698
+        WHEN	DENO	=	698	THEN	798
+        WHEN	DENO	=	798	THEN	898
+        WHEN	DENO	=	898	THEN	899
+                            
+        WHEN	DENO	=	217	THEN	258
+        WHEN	DENO	=	258	THEN	398
+        WHEN	DENO	=	398	THEN	498
+        WHEN	DENO	=	498	THEN	598
+        WHEN	DENO	=	598	THEN	699
+        WHEN	DENO	=	699	THEN	818
+        WHEN	DENO	=	818	THEN	999
+        WHEN	DENO	=	999	THEN	1099
+        WHEN	DENO	=	1099	THEN	1199
+        WHEN	DENO	=	1199	THEN	1493
+                            
+        WHEN	DENO	=	59	THEN	89
+        WHEN	DENO	=	89	THEN	107
+        WHEN	DENO	=	107	THEN	129
+        WHEN	DENO	=	129	THEN	208
+        WHEN	DENO	=	208	THEN	309
+                            
+        WHEN	DENO	=	19	THEN	29
+        WHEN	DENO	=	29	THEN	39
+        WHEN	DENO	=	39	THEN	49
+        WHEN	DENO	=	49	THEN	68
+        WHEN	DENO	=	68	THEN	99
+        WHEN	DENO	=	99	THEN	119
+        WHEN	DENO	=	119	THEN	139
+        WHEN	DENO	=	139	THEN	158
+        WHEN	DENO	=	158	THEN	197
+        WHEN	DENO	=	197	THEN	228
+        WHEN	DENO	=	228	THEN	268
+        WHEN	DENO	=	268	THEN	279
+        WHEN	DENO	=	279	THEN	319
+        WHEN	DENO	=	319	THEN	339
+        WHEN	DENO	=	339	THEN	419
+        WHEN	DENO	=	419	THEN	519
+        WHEN	DENO	=	519	THEN	547
+        WHEN	DENO	=	547	THEN	639
+        WHEN	DENO	=	639	THEN	729
+
 
                ELSE TO_NUMBER(DENO)
            END AS DENO,

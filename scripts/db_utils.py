@@ -11,10 +11,10 @@ def read_oracle_data(query, user, password, dsn):
         print(f"An error occurred while reading from Oracle: {e}")
         return None
 
-def export_to_oracle(df, table_name, user, password, dsn, batch_size=50000):
+def export_to_oracle(df, table_name, user, password, dsn, batch_size=500000):
     """
     Export DataFrame to an Oracle database table.
-    Creates the table if it doesn't exist and inserts data in batches.
+    Creates the table if it doesn't exist and inserts data in streaming batches.
     """
     def get_oracle_type(dtype):
         if pd.api.types.is_integer_dtype(dtype):
@@ -46,19 +46,20 @@ def export_to_oracle(df, table_name, user, password, dsn, batch_size=50000):
                     cursor.execute(create_table_sql)
                     print(f"Table '{table_name}' created successfully.")
 
-                print(f"Inserting data into {table_name}...")
+                print(f"Inserting data into {table_name} ({len(df):,} rows)...")
                 columns = ", ".join([f'"{col.upper()}"' for col in df.columns])
                 placeholders = ", ".join([f":{i+1}" for i in range(len(df.columns))])
                 insert_sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-                
-                data_tuples = [tuple(row) for row in df.itertuples(index=False, name=None)]
-                
-                for i in range(0, len(data_tuples), batch_size):
-                    batch = data_tuples[i:i + batch_size]
+
+                total = len(df)
+                for i in range(0, total, batch_size):
+                    batch_df = df.iloc[i:i + batch_size]
+                    batch = [tuple(row) for row in batch_df.itertuples(index=False, name=None)]
                     cursor.executemany(insert_sql, batch)
                     connection.commit()
-                    print(f"Inserted {len(batch)} rows (total {i + len(batch)} of {len(data_tuples)}).")
+                    del batch
+                    print(f"  Inserted {min(i + batch_size, total):,} / {total:,}")
 
-            print(f"Data successfully exported to {table_name} in Oracle DB.")
+            print(f"Data successfully exported to {table_name}.")
     except Exception as e:
         print(f"An error occurred during export: {e}")

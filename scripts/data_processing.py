@@ -12,18 +12,16 @@ import os
 import gzip
 import pickle
 import numpy as np
-
 def preprocess_data(base_df, infer=False):
     """
     When infer=True, label encoding is skipped (no 'label' column created).
     """
-    df = base_df.copy()
+    df = base_df
     df.columns = df.columns.str.lower()
     
     # One-hot encode
     df = pd.get_dummies(df, columns=['circle','region','rchg_chnl'])
     df.columns = df.columns.str.lower()
-
     # Outlier handling
     if not infer:
         # During training: remove outliers and save thresholds
@@ -49,17 +47,14 @@ def preprocess_data(base_df, infer=False):
 
 
 
-
     # Feature engineering
     column_diff_01 = ['dstr_change_01','mou_change_01','vol_change_01']
     column_diff_12 = ['dstr_change_12','mou_change_12','vol_change_12']
     column_0 = ['total_dstr','mo_mou','vol_mb']
     column_1 = ['total_dstr_1','mo_mou_1','vol_mb_1']
     column_2 = ['total_dstr_2','mo_mou_2','vol_mb_2']
-
     for index, name in enumerate(column_diff_01):
         df[name] = (df[column_0[index]] - df[column_1[index]]).fillna(df[column_0[index]])
-
     for index, name in enumerate(column_diff_12):
         df[name] = (df[column_1[index]] - df[column_2[index]]).fillna(
             df[column_1[index]].fillna(0)
@@ -69,7 +64,6 @@ def preprocess_data(base_df, infer=False):
     if df.isnull().values.any():
         print("NaNs found in data. Filling with 0 to prevent propogation to loss.")
         df.fillna(0, inplace=True)
-
     label_le = None
     if not infer:
         # Label encoding only during training
@@ -86,12 +80,10 @@ def preprocess_data(base_df, infer=False):
         # Rank in terms of pack rev to make distinct transaction
         df['pack_rank'] = df.groupby(['msisdn'])['hit'].rank(method="first", ascending=False)
         df = df.astype({"pack_rank": int})
-
         for col in df.select_dtypes(include=['float64']).columns:
             df[col] = df[col].astype(np.float32)
         
     return df
-
 def load_and_process_data(db_config, infer=False):
     """Loads data from Oracle and processes it."""
     print("Loading and merging data from Oracle...")
@@ -101,7 +93,6 @@ def load_and_process_data(db_config, infer=False):
     else:
         table1, table2, table3 = cfg.TABLE_BASE_01, cfg.TABLE_BASE_02, cfg.TABLE_BASE_03
         base_path = 'data/base_train.gz'
-
     # If saved base is available, load from gz
     if os.path.exists(base_path):
         print(f"Loading base from {base_path}...")
@@ -116,7 +107,6 @@ def load_and_process_data(db_config, infer=False):
         if base1 is None or base2 is None or base3 is None:
             print("Failed to load one or more tables. Aborting.")
             return None
-
         base1['MSISDN'] = base1['MSISDN'].astype(int)
         base2['MSISDN_1'] = base2['MSISDN_1'].astype(int)
         base3['MSISDN_2'] = base3['MSISDN_2'].astype(int)
@@ -125,7 +115,7 @@ def load_and_process_data(db_config, infer=False):
                     .merge(base3, how='left', left_on='MSISDN', right_on='MSISDN_2')
         
         print("Saving base...")
-        with gzip.open(base_path, 'wb') as f:
+        with gzip.open(base_path, 'wb', compresslevel=1) as f:
             pickle.dump(base, f, protocol=4)
     
     print("Preprocessing data...")

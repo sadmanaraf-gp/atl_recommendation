@@ -13,75 +13,70 @@ from dotenv import load_dotenv
 from scripts.model import build_model
 from scripts.config import *
 from scripts.data_processing import load_and_process_data
-from scripts.db_utils import export_to_oracle 
+from scripts.db_utils import export_to_oracle
 import oracledb
-
 
 
 load_dotenv()
 
-def run_inference(model, scaler, data, features, batch_size: int = 20000000):
-    """Scales data and runs model prediction in batches."""
+# Load label encoder to get correct class-to-index mapping
+# LabelEncoder.classes_ is sorted and matches model output order
+with open('artifacts/label_encoder.pkl', 'rb') as f:
+    _label_encoder = pickle.load(f)
+class_names = list(_label_encoder.classes_)
+
+
+def run_inference_top_k(model, scaler, data, features, prob_cutoff, top_k, taker_flag, batch_size=2_000_000):
+    """Predict in chunks and extract top-K immediately.
+    Never stores the full N×53 probability matrix — extracts top-K per batch and discards."""
     data_scaled = scaler.transform(data[features]).astype(np.float32)
-
-    start_pos = 0
-    max_size = len(data)
-    prediction_batches = []
-
-    print('Prediction generation started...')
-    while start_pos < max_size:
-        print(f'Generating from {start_pos} to {start_pos + batch_size}')
-        batch_data = data_scaled[start_pos:start_pos + batch_size]
-        pred_batch = model.predict(batch_data)
-        prediction_batches.append(pred_batch)
-        start_pos += batch_size
-
-    predictions = np.concatenate(prediction_batches, axis=0)
-
-    for index, name in enumerate(class_names):
-        data[name] = predictions[:, index]
-
-    return data
-
-
-def extract_top_k(predictions_df, prob_cutoff, top_k, taker_flag):
-    """Extract top-K predictions per subscriber using vectorized numpy operations.
-    Avoids expensive melt + groupby.rank on billion-row DataFrames."""
-    msisdns = predictions_df['msisdn'].values
-    pred_matrix = predictions_df[class_names].values.astype(np.float32)
+    msisdns = data['msisdn'].values
     class_arr = np.array(class_names)
+    k = min(top_k, len(class_names))
 
-    # Get top-K indices per row using argpartition (O(n) per row vs O(n log n) for full sort)
-    k = min(top_k, pred_matrix.shape[1])
-    top_k_indices = np.argpartition(pred_matrix, -k, axis=1)[:, -k:]
+    results = []
+    n = len(data_scaled)
 
-    # Gather corresponding probabilities
-    row_idx = np.arange(len(msisdns))[:, None]
-    top_k_probs = pred_matrix[row_idx, top_k_indices]
+    print(f'  Prediction started: {n:,} subscribers, top-{k}, cutoff={prob_cutoff}')
+    for start in range(0, n, batch_size):
+        end = min(start + batch_size, n)
+        print(f'  Batch {start:,} – {end:,} / {n:,}')
 
-    # Sort within top-K (descending) for proper ranking
-    sort_order = np.argsort(-top_k_probs, axis=1)
-    top_k_indices = np.take_along_axis(top_k_indices, sort_order, axis=1)
-    top_k_probs = np.take_along_axis(top_k_probs, sort_order, axis=1)
+        pred_batch = model.predict(data_scaled[start:end], verbose=0)
+        batch_msisdns = msisdns[start:end]
 
-    # Flatten into DataFrame
-    n_subs = len(msisdns)
-    msisdn_rep = np.repeat(msisdns, k)
-    deno_flat = class_arr[top_k_indices.ravel()]
-    prob_flat = top_k_probs.ravel()
-    rank_flat = np.tile(np.arange(1, k + 1), n_subs)
+        # Extract top-K immediately per batch
+        top_k_idx = np.argpartition(pred_batch, -k, axis=1)[:, -k:]
+        row_idx = np.arange(len(batch_msisdns))[:, None]
+        top_k_probs = pred_batch[row_idx, top_k_idx]
 
-    result = pd.DataFrame({
-        'msisdn': msisdn_rep,
-        'deno': deno_flat,
-        'prob': prob_flat,
-        'rank': rank_flat
-    })
+        # Sort within top-K (descending)
+        sort_order = np.argsort(-top_k_probs, axis=1)
+        top_k_idx = np.take_along_axis(top_k_idx, sort_order, axis=1)
+        top_k_probs = np.take_along_axis(top_k_probs, sort_order, axis=1)
 
-    # Apply probability cutoff
-    result = result[result['prob'] > prob_cutoff]
+        # Flatten
+        n_batch = len(batch_msisdns)
+        msisdn_rep = np.repeat(batch_msisdns, k)
+        deno_flat = class_arr[top_k_idx.ravel()]
+        prob_flat = top_k_probs.ravel()
+        rank_flat = np.tile(np.arange(1, k + 1), n_batch)
+
+        # Apply probability cutoff before appending
+        mask = prob_flat > prob_cutoff
+        if mask.any():
+            results.append(pd.DataFrame({
+                'msisdn': msisdn_rep[mask],
+                'deno': deno_flat[mask],
+                'prob': prob_flat[mask],
+                'rank': rank_flat[mask],
+            }))
+
+        del pred_batch, top_k_probs, top_k_idx  # free memory immediately
+
+    result = pd.concat(results, ignore_index=True)
     result['taker_flag'] = taker_flag
-
+    print(f'  Done. {len(result):,} predictions after cutoff.')
     return result
 
 
@@ -104,7 +99,7 @@ def main():
         if base_infer is None:
             return
         os.makedirs('data', exist_ok=True)
-        with gzip.open('data/processed_base_infer.gz', 'wb') as f:
+        with gzip.open('data/processed_base_infer.gz', 'wb', compresslevel=1) as f:
             pickle.dump(base_infer, f, protocol=4)
         print("Saved processed inference data to data/processed_base_infer.gz")
 
@@ -121,97 +116,39 @@ def main():
     with open('artifacts/atl_scaler_non_taker.pkl', 'rb') as f:
         sc_non_taker = pickle.load(f)
 
-    # 3. Check if base predictions are already stored
+    # 3. Run predictions (fused predict + top-K extraction)
     base_pred_path = 'data/base_pred.gz'
     if os.path.exists(base_pred_path):
-        print(f"Base predictions already exist at {base_pred_path}. Skipping prediction flow.")
+        print(f"Base predictions found at {base_pred_path}. Loading...")
         with gzip.open(base_pred_path, 'rb') as f:
             base_pred = pickle.load(f)
     else:
-        print("Base predictions not found. Running prediction flow...")
-        # Split base data
+        print("Running prediction flow...")
 
-        taker_pred_path = 'data/taker_predictions.gz'
-        nontaker_pred_path = 'data/nontaker_predictions.gz'
+        taker_df = base_infer[base_infer['pack_flag'] == 'TAKER']
+        nontaker_df = base_infer[base_infer['pack_flag'] == 'NON_TAKER']
 
-        taker_predictions = None
-        nontaker_predictions = None
+        print(f"\nTaker inference ({len(taker_df):,} subscribers)...")
+        base_taker_pred = run_inference_top_k(
+            model_taker, sc_taker, taker_df, TAKER_FEATURES,
+            TAKER_PROB_CUTOFF, PACK_NO, taker_flag=1
+        )
 
-        # Check if taker predictions exist
-        if os.path.exists(taker_pred_path):
-            print(f"Taker predictions already exist at {taker_pred_path}. Skipping taker prediction flow.")
-            with gzip.open(taker_pred_path, 'rb') as f:
-                taker_predictions = pickle.load(f)
-        else:
-            print("Taker predictions not found. Running taker prediction flow...")
-            taker_infer_df = base_infer[base_infer['pack_flag'] == 'TAKER'].copy()
-            taker_predictions = run_inference(model_taker, sc_taker, taker_infer_df, TAKER_FEATURES)
-            os.makedirs('data', exist_ok=True)
-            with gzip.open(taker_pred_path, 'wb') as f:
-                pickle.dump(taker_predictions, f, protocol=4)
-                print(f"Taker predictions saved to '{taker_pred_path}'.")
+        print(f"\nNon-Taker inference ({len(nontaker_df):,} subscribers)...")
+        base_nontaker_pred = run_inference_top_k(
+            model_non_taker, sc_non_taker, nontaker_df, NONTAKER_FEATURES,
+            NONTAKER_PROB_CUTOFF, PACK_NO, taker_flag=0
+        )
 
-        # Check if non-taker predictions exist
-        if os.path.exists(nontaker_pred_path):
-            print(f"Non-taker predictions already exist at {nontaker_pred_path}. Skipping non-taker prediction flow.")
-            with gzip.open(nontaker_pred_path, 'rb') as f:
-                nontaker_predictions = pickle.load(f)
-        else:
-            print("Non-taker predictions not found. Running non-taker prediction flow...")
-            nontaker_infer_df = base_infer[base_infer['pack_flag'] == 'NON_TAKER'].copy()
-            nontaker_predictions = run_inference(model_non_taker, sc_non_taker, nontaker_infer_df, NONTAKER_FEATURES)
-            os.makedirs('data', exist_ok=True)
-            with gzip.open(nontaker_pred_path, 'wb') as f:
-                pickle.dump(nontaker_predictions, f, protocol=4)
-                print(f"Non-taker predictions saved to '{nontaker_pred_path}'.")
+        base_pred = pd.concat([base_taker_pred, base_nontaker_pred], ignore_index=True)
+        base_pred = base_pred.astype({"msisdn": int, "deno": int})
 
-        print("Inference complete. Predictions available in 'data/'.")
+        print(f"\nTotal predictions: {len(base_pred):,}")
+        with gzip.open(base_pred_path, 'wb', compresslevel=1) as f:
+            pickle.dump(base_pred, f, protocol=4)
+        print(f"Saved to {base_pred_path}")
 
-        taker_base_path = 'data/base_taker_pred.gz'
-        nontaker_base_path = 'data/base_nontaker_pred.gz'
-
-        # Extract top-K predictions using vectorized numpy (avoids billion-row melt)
-        if os.path.exists(taker_base_path):
-            print(f"Base taker pred already exist at {taker_base_path}. Loading...")
-            with gzip.open(taker_base_path, 'rb') as f:
-                base_taker_pred = pickle.load(f)
-        else:
-            print("Base taker pred not found. Computing top-K...")
-            base_taker_pred = extract_top_k(taker_predictions, TAKER_PROB_CUTOFF, PACK_NO, taker_flag=1)
-            os.makedirs('data', exist_ok=True)
-            with gzip.open(taker_base_path, 'wb', compresslevel=4) as f:
-                pickle.dump(base_taker_pred, f, protocol=4)
-                print(f"Saved base taker pred to {taker_base_path}.")
-
-        if os.path.exists(nontaker_base_path):
-            print(f"Base non-taker pred already exist at {nontaker_base_path}. Loading...")
-            with gzip.open(nontaker_base_path, 'rb') as f:
-                base_nontaker_pred = pickle.load(f)
-        else:
-            print("Base non-taker pred not found. Computing top-K...")
-            base_nontaker_pred = extract_top_k(nontaker_predictions, NONTAKER_PROB_CUTOFF, PACK_NO, taker_flag=0)
-            os.makedirs('data', exist_ok=True)
-            with gzip.open(nontaker_base_path, 'wb', compresslevel=4) as f:
-                pickle.dump(base_nontaker_pred, f, protocol=4)
-                print(f"Saved base non-taker pred to {nontaker_base_path}.")
-
-
-
-        # Combine predictions and save base_pred (load if exists, otherwise compute & save)
-        if os.path.exists(base_pred_path):
-            print(f"Base predictions already exist at {base_pred_path}. Loading...")
-            with gzip.open(base_pred_path, 'rb') as f:
-                base_pred = pickle.load(f)
-        else:
-            print("Base predictions not found. Combining and saving...")
-            base_pred = pd.concat([base_taker_pred, base_nontaker_pred], ignore_index=True)
-            base_pred = base_pred.astype({"msisdn": int, "deno": int})
-
-            os.makedirs('data', exist_ok=True)
-            with gzip.open(base_pred_path, 'wb', compresslevel=4) as f:
-                pickle.dump(base_pred, f, protocol=4)
-
-    # Use the shared utility to export to Oracle
+    # 4. Export to Oracle
     export_to_oracle(
         df=base_pred,
         table_name=FINAL_TABLE,
@@ -224,4 +161,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
