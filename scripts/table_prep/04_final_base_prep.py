@@ -118,7 +118,8 @@ STATEMENTS: List[str] = [
     CREATE TABLE TBL_ATL_PREDICTION_{PM}_UPSELL
     COMPRESS FOR ARCHIVE HIGH AS
     SELECT MSISDN,
-    CASE	WHEN	DENO	=	98	THEN	118
+    CASE						
+        WHEN	DENO	=	98	THEN	118
         WHEN	DENO	=	118	THEN	148
         WHEN	DENO	=	148	THEN	179
         WHEN	DENO	=	179	THEN	198
@@ -135,7 +136,8 @@ STATEMENTS: List[str] = [
         WHEN	DENO	=	898	THEN	899
                             
         WHEN	DENO	=	217	THEN	258
-        WHEN	DENO	=	258	THEN	398
+        WHEN	DENO	=	258	THEN	279
+        WHEN	DENO	=	279	THEN	398
         WHEN	DENO	=	398	THEN	498
         WHEN	DENO	=	498	THEN	598
         WHEN	DENO	=	598	THEN	699
@@ -150,7 +152,12 @@ STATEMENTS: List[str] = [
         WHEN	DENO	=	107	THEN	129
         WHEN	DENO	=	129	THEN	208
         WHEN	DENO	=	208	THEN	309
+        WHEN	DENO	=	309	THEN	509
+        WHEN	DENO	=	509	THEN	989
                             
+        WHEN	DENO	=	9	THEN	11
+        WHEN	DENO	=	11	THEN	15
+        WHEN	DENO	=	15	THEN	19
         WHEN	DENO	=	19	THEN	29
         WHEN	DENO	=	29	THEN	39
         WHEN	DENO	=	39	THEN	49
@@ -162,15 +169,13 @@ STATEMENTS: List[str] = [
         WHEN	DENO	=	158	THEN	197
         WHEN	DENO	=	197	THEN	228
         WHEN	DENO	=	228	THEN	268
-        WHEN	DENO	=	268	THEN	279
-        WHEN	DENO	=	279	THEN	319
+        WHEN	DENO	=	268	THEN	319
         WHEN	DENO	=	319	THEN	339
         WHEN	DENO	=	339	THEN	419
         WHEN	DENO	=	419	THEN	519
         WHEN	DENO	=	519	THEN	547
         WHEN	DENO	=	547	THEN	639
         WHEN	DENO	=	639	THEN	729
-
 
                ELSE TO_NUMBER(DENO)
            END AS DENO,

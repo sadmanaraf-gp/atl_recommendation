@@ -19,7 +19,7 @@ import oracledb
 
 load_dotenv()
 
-# Load label encoder to get correct class-to-index mapping
+
 # LabelEncoder.classes_ is sorted and matches model output order
 with open('artifacts/label_encoder.pkl', 'rb') as f:
     _label_encoder = pickle.load(f)

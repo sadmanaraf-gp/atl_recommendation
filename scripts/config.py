@@ -3,7 +3,7 @@ COLS = ['msisdn', 'total_dstr', 'voicerev_total', 'datarev_total',
        'mixed_bundle_rev', 'voicerev_trig', 'datarev_trig', 'vol_mb', 'mo_mou',
        'recharge_cnt', 'recharge_amount', 'recharge_max', 'data_rg_days',
        'voice_rg_days', 'smartphone', 'subs_all_90d', 'mygp_m1_act','mygp_m2_act','mygp_active_days','mygp_pack_rev',
-        'mygp_pack_hits','rchg_amt_max_mygp','rchg_amt_mygp','rchg_amt_max_digital','rchg_amt_digtal',
+       'mygp_pack_hits','rchg_amt_max_mygp','rchg_amt_mygp','rchg_amt_max_digital','rchg_amt_digtal',
        'days_since_last_rcrg', 'total_dstr_1', 'vol_mb_1',
        'mo_mou_1', 'recharge_cnt_1', 'voicerev_total_1', 'datarev_total_1',
        'mixed_bundle_rev_1', 'voicerev_trig_1', 'datarev_trig_1',
@@ -14,8 +14,16 @@ COLS = ['msisdn', 'total_dstr', 'voicerev_total', 'datarev_total',
        'mou_change_12', 'vol_change_12','amount','amount1','amount2','amount3','amount4','amount5','amount6','amount7','amount8',
        'srvc1', 'srvc2', 'srvc3', 'srvc4', 'srvc5', 'srvc6', 'srvc7', 'srvc8','circle_chittagong','circle_dhaka',
        'circle_khulna','circle_mymensingh','circle_rajshahi','circle_sylhet','circle_unknown','rchg_chnl_01. freq_retail_only',
-       'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only',
-       'rchg_chnl_unknown']
+       'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only','rchg_chnl_unknown', 
+        'data_rev_share', 'voice_rev_share', 'bundle_rev_share',
+       'appmb', 'appm', 'avg_recharge_value', 'recharge_concentration',
+       'datarev_trend', 'vol_trend', 'mou_trend',
+       'vol_mean_3m', 'vol_volatility', 'vol_cv',
+       'vol_acceleration', 'mou_acceleration',
+       'digital_recharge_ratio', 'mygp_recharge_ratio', 'mygp_rev_per_hit',
+       'mygp_active_ratio', 'mygp_persistence',
+       'rev_per_active_day', 'recharge_per_active_day', 'data_voice_day_ratio',
+       'rfm_score', 'is_declining_data', 'smartphone_data_user']
 
 TAKER_FEATURES = ['total_dstr', 'voicerev_total', 'datarev_total',
        'mixed_bundle_rev', 'voicerev_trig', 'datarev_trig', 'vol_mb', 'mo_mou',
@@ -32,8 +40,16 @@ TAKER_FEATURES = ['total_dstr', 'voicerev_total', 'datarev_total',
        'mou_change_12', 'vol_change_12','amount1','amount2','amount3','amount4','amount5','amount6','amount7','amount8',
         'srvc1', 'srvc2', 'srvc3', 'srvc4', 'srvc5', 'srvc6', 'srvc7', 'srvc8','circle_chittagong','circle_dhaka',
        'circle_khulna','circle_mymensingh','circle_rajshahi','circle_sylhet','circle_unknown','rchg_chnl_01. freq_retail_only',
-       'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only',
-       'rchg_chnl_unknown']
+       'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only','rchg_chnl_unknown',
+          'data_rev_share', 'voice_rev_share', 'bundle_rev_share',
+       'appmb', 'appm', 'avg_recharge_value', 'recharge_concentration',
+       'datarev_trend', 'vol_trend', 'mou_trend',
+       'vol_mean_3m', 'vol_volatility', 'vol_cv',
+       'vol_acceleration', 'mou_acceleration',
+       'digital_recharge_ratio', 'mygp_recharge_ratio', 'mygp_rev_per_hit',
+       'mygp_active_ratio', 'mygp_persistence',
+       'rev_per_active_day', 'recharge_per_active_day', 'data_voice_day_ratio',
+       'rfm_score', 'is_declining_data', 'smartphone_data_user']
 
 NONTAKER_FEATURES = ['total_dstr', 'voicerev_total', 'datarev_total',
        'mixed_bundle_rev', 'voicerev_trig', 'datarev_trig', 'vol_mb', 'mo_mou',
@@ -49,15 +65,23 @@ NONTAKER_FEATURES = ['total_dstr', 'voicerev_total', 'datarev_total',
        'dstr_change_01', 'mou_change_01', 'vol_change_01', 'dstr_change_12',
        'mou_change_12', 'vol_change_12','circle_chittagong','circle_dhaka',
        'circle_khulna','circle_mymensingh','circle_rajshahi','circle_sylhet','circle_unknown','rchg_chnl_01. freq_retail_only',
-       'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only',
-       'rchg_chnl_unknown']
+       'rchg_chnl_02. freq_retail_dominant','rchg_chnl_03. freq_mixed','rchg_chnl_04. freq_digital_dominant','rchg_chnl_05. freq_digital_only','rchg_chnl_unknown',
+       'data_rev_share', 'voice_rev_share', 'bundle_rev_share',
+       'appmb', 'appm', 'avg_recharge_value', 'recharge_concentration',
+       'datarev_trend', 'vol_trend', 'mou_trend',
+       'vol_mean_3m', 'vol_volatility', 'vol_cv',
+       'vol_acceleration', 'mou_acceleration',
+       'digital_recharge_ratio', 'mygp_recharge_ratio', 'mygp_rev_per_hit',
+       'mygp_active_ratio', 'mygp_persistence',
+       'rev_per_active_day', 'recharge_per_active_day', 'data_voice_day_ratio',
+       'rfm_score', 'is_declining_data', 'smartphone_data_user']
 
 TARGET = ['label']
 
 # Model parameters
 NODES = 2048
 DROPOUT_RATE = 0.3
-N_CLASSES = 53
+N_CLASSES = 58
 EPOCHS = 20
 BATCH_SIZE = 1024
 VALIDATION_SPLIT = 0.3
@@ -84,10 +108,5 @@ TABLE_INFER_01 = "SA_TBL_ATL_BASE_INFER_01"
 TABLE_INFER_02 = "SA_TBL_ATL_BASE_INFER_02"
 TABLE_INFER_03 = "SA_TBL_ATL_BASE_INFER_03"
 TABLE_PRED_PREFIX = "SA_TBL_ATL_PRED_"
-FINAL_TABLE = "SA_TBL_ATL_PRED_202605"
-# class_names= [98,	148,	308,	179,	118,	198,	219,	249,
-# 	499,	599,	399,	698,	899,	798,	649,	898,	19,
-#        29,	39,	49,	99,	68,	119,	228,	139,
-#        158,	197,	268,	319,	339,	419,	519,   547,	639,	729,	279,	217,	398,
-#        498,	258,	598,	699,	818,   999,	1099,	1199,	1493,
-#        59,	89,	107,	129,	208,	309]
+FINAL_TABLE = "SA_TBL_ATL_PRED_202606"
+

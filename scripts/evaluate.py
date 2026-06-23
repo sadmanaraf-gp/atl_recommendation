@@ -1,7 +1,12 @@
 import numpy as np
 import json
 import os
-from .config import class_names, N_CLASSES
+from .config import  N_CLASSES
+import pickle
+# LabelEncoder.classes_ is sorted and matches model output order
+with open('artifacts/label_encoder.pkl', 'rb') as f:
+    _label_encoder = pickle.load(f)
+class_names = list(_label_encoder.classes_)
 
 
 def hit_at_k(y_true, y_pred_proba, k=5):

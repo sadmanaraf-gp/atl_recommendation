@@ -12,6 +12,22 @@ import os
 import gzip
 import pickle
 import numpy as np
+
+def _safe_div(num, den, fill=0.0):
+    """Element-wise divide that avoids div-by-zero / inf."""
+    den = den.replace(0, np.nan)
+    return (num / den).replace([np.inf, -np.inf], np.nan).fillna(fill)
+
+
+def _trend_slope(df, cols):
+    """Linear slope across ordered month columns [t-2, t-1, t]."""
+    # x = [0, 1, 2] -> slope via closed-form OLS, vectorized over rows
+    x = np.array([0, 1, 2])
+    y = df[cols].to_numpy(dtype=float)
+    x_mean, y_mean = x.mean(), y.mean(axis=1, keepdims=True)
+    slope = ((x - x_mean) * (y - y_mean)).sum(axis=1) / ((x - x_mean) ** 2).sum()
+    return pd.Series(slope, index=df.index).fillna(0.0)
+
 def preprocess_data(base_df, infer=False):
     """
     When infer=True, label encoding is skipped (no 'label' column created).
@@ -82,7 +98,63 @@ def preprocess_data(base_df, infer=False):
         df = df.astype({"pack_rank": int})
         for col in df.select_dtypes(include=['float64']).columns:
             df[col] = df[col].astype(np.float32)
-        
+
+    # 1) Revenue mix / ARPU share -------------------------------------------
+
+    df['data_rev_share'] = _safe_div(df['datarev_total'], df['arpu_total'])
+    df['voice_rev_share'] = _safe_div(df['voicerev_total'], df['arpu_total'])
+    df['bundle_rev_share'] = _safe_div(df['mixed_bundle_rev'], df['arpu_total'])
+
+    # 2) Unit economics ------------------------------------------------------
+    df['appmb'] = _safe_div(df['datarev_total'], df['vol_mb'])
+    df['appm'] = _safe_div(df['voicerev_total'], df['mo_mou'])
+    df['avg_recharge_value'] = _safe_div(df['recharge_amount'], df['recharge_cnt'])
+    df['recharge_concentration'] = _safe_div(df['recharge_max'],
+                                             df['recharge_amount'])
+    
+    # 3) 3-month trend & volatility -----------------------------------------
+    df['datarev_trend'] = _trend_slope(df, ['datarev_total_2',
+                                            'datarev_total_1', 'datarev_total'])
+    df['vol_trend'] = _trend_slope(df, ['vol_mb_2', 'vol_mb_1', 'vol_mb'])
+    df['mou_trend'] = _trend_slope(df, ['mo_mou_2', 'mo_mou_1', 'mo_mou'])
+
+    df['vol_mean_3m'] = df[['vol_mb_2', 'vol_mb_1', 'vol_mb']].mean(axis=1)
+    df['vol_volatility'] = df[['vol_mb_2', 'vol_mb_1', 'vol_mb']].std(axis=1).fillna(0)
+    df['vol_cv'] = _safe_div(df['vol_volatility'], df['vol_mean_3m'])
+
+    # acceleration: is the change itself speeding up / slowing down?
+    df['vol_acceleration'] = df['vol_change_01'] - df['vol_change_12']
+    df['mou_acceleration'] = df['mou_change_01'] - df['mou_change_12']
+
+    # 4) Digital adoption intensity -----------------------------------------
+    df['digital_recharge_ratio'] = _safe_div(df['rchg_amt_digtal'],
+                                              df['recharge_amount'])
+    df['mygp_recharge_ratio'] = _safe_div(df['rchg_amt_mygp'],
+                                           df['recharge_amount'])
+    df['mygp_rev_per_hit'] = _safe_div(df['mygp_pack_rev'], df['mygp_pack_hits'])
+    df['mygp_active_ratio'] = _safe_div(df['mygp_active_days'],
+                                        pd.Series(90, index=df.index))
+    df['mygp_persistence'] = df['mygp_m1_act'] + df['mygp_m2_act']
+
+    # 5) Activity-normalized & RFM ------------------------------------------
+    df['rev_per_active_day'] = _safe_div(df['arpu_total'], df['mygp_active_days'])
+    df['recharge_per_active_day'] = _safe_div(df['recharge_cnt'],
+                                              df['mygp_active_days'])
+    df['data_voice_day_ratio'] = _safe_div(df['data_rg_days'], df['voice_rg_days'])
+
+        # simple RFM score (higher = more engaged)
+    df['rfm_score'] = (
+        df['recharge_cnt'].rank(pct=True)            # Frequency
+        + df['recharge_amount'].rank(pct=True)       # Monetary
+        + (1 - df['days_since_last_rcrg'].rank(pct=True))  # Recency (inverted)
+    )
+
+    # behavioral risk flags
+    df['is_declining_data'] = ((df['vol_change_01'] < 0)
+                               & (df['vol_change_12'] < 0)).astype(int)
+    df['smartphone_data_user'] = (df['smartphone'].fillna(0)
+                                  * (df['vol_mb'] > 0).astype(int))
+
     return df
 def load_and_process_data(db_config, infer=False):
     """Loads data from Oracle and processes it."""
