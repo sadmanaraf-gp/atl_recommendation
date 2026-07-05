@@ -8,3 +8,8 @@ oracledb
 SQLAlchemy
 h5py
 python-dotenv
+shap
+streamlit
+matplotlib
+plotly
+pyarrow
