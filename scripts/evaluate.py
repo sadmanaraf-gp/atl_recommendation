@@ -3,10 +3,20 @@ import json
 import os
 from .config import  N_CLASSES
 import pickle
-# LabelEncoder.classes_ is sorted and matches model output order
-with open('artifacts/label_encoder.pkl', 'rb') as f:
-    _label_encoder = pickle.load(f)
-class_names = list(_label_encoder.classes_)
+
+# LabelEncoder.classes_ is sorted and matches model output order.
+# Loaded lazily so importing this module doesn't require the artifact to exist
+# yet (it is written during training by load_and_process_data).
+_class_names = None
+
+
+def get_class_names():
+    global _class_names
+    if _class_names is None:
+        with open('artifacts/label_encoder.pkl', 'rb') as f:
+            _label_encoder = pickle.load(f)
+        _class_names = list(_label_encoder.classes_)
+    return _class_names
 
 
 def hit_at_k(y_true, y_pred_proba, k=5):
@@ -74,6 +84,7 @@ def revenue_at_k(y_true, y_pred_proba, k=5):
     hits = np.array([y_true[i] in top_k_preds[i] for i in range(len(y_true))])
     
     # Map label indices back to denominations
+    class_names = get_class_names()
     deno_values = np.array(class_names)
     true_denominations = deno_values[y_true]
     
@@ -99,6 +110,7 @@ def class_distribution_report(y_true, y_pred_proba):
     Returns:
         dict with distribution analysis
     """
+    class_names = get_class_names()
     predicted_classes = np.argmax(y_pred_proba, axis=1)
     n_samples = len(predicted_classes)
     

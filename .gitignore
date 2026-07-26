@@ -12,6 +12,7 @@ venv/
 ENV/
 venv.bak/
 .venv/
+.venv-vllm/
 
 # Notebooks
 .ipynb_checkpoints

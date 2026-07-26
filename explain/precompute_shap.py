@@ -25,11 +25,22 @@ import gzip
 import json
 import pickle
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
 
 from explain import shap_utils as su
+from explain import llm_explain
+
+# Cap TensorFlow GPU memory (SHAP inference needs little) so this job can share
+# the L40S with the local vLLM server that generates the explanations.
+try:
+    import tensorflow as tf
+    for _gpu in tf.config.list_physical_devices("GPU"):
+        tf.config.experimental.set_memory_growth(_gpu, True)
+except Exception:
+    pass
 
 PROCESSED_INFER = os.path.join(su.ROOT, "data", "processed_base_infer.gz")
 BASE_PRED = os.path.join(su.ROOT, "data", "base_pred.gz")
@@ -61,7 +72,41 @@ def _stratified_sample(df, strat_col, n, seed=42):
     return out
 
 
-def precompute_for_kind(model_kind, infer_df, top_pack, sample_size):
+def _pack_medians(out, features, min_rows=20):
+    """Per-pack median of each raw feature (from the val_ columns), with a
+    population-median fallback for packs with too few sampled buyers. Mirrors
+    the dashboard's pack_reference() so batch and live explanations agree."""
+    val_cols = [f"val_{c}" for c in features]
+    pop = out[val_cols].median()
+    per_deno = {}
+    for deno, grp in out.groupby("deno"):
+        med = grp[val_cols].median() if len(grp) >= min_rows else pop
+        per_deno[int(deno)] = med.to_numpy(dtype=np.float32)
+    pop_arr = pop.to_numpy(dtype=np.float32)
+    return per_deno, pop_arr
+
+
+def _generate_explanations(model_kind, features, out, X, shap_mat, max_workers=8):
+    """LLM explanation text for every sampled subscriber, in row order.
+
+    Uses the same drivers the dashboard shows (SHAP row + raw values + per-pack
+    typical values). Returns a list of strings/None aligned to `out`.
+    """
+    per_deno, pop_arr = _pack_medians(out, features)
+    denos = out["deno"].to_numpy()
+
+    def one(i):
+        ref = per_deno.get(int(denos[i]), pop_arr)
+        return llm_explain.explain(
+            model_kind, denos[i], features, shap_mat[i], X[i], ref
+        )
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        return list(pool.map(one, range(len(out))))
+
+
+def precompute_for_kind(model_kind, infer_df, top_pack, sample_size,
+                        with_llm=True, llm_workers=8):
     print(f"\n=== {model_kind} ===")
     features = su.features_for(model_kind)
 
@@ -98,6 +143,16 @@ def precompute_for_kind(model_kind, infer_df, top_pack, sample_size):
     val_cols = pd.DataFrame(X, columns=[f"val_{c}" for c in features], index=out.index)
     out = pd.concat([out, shap_cols, val_cols], axis=1)
 
+    if with_llm and llm_explain.is_configured():
+        print(f"  generating LLM explanations for {len(out):,} subscribers...")
+        texts = _generate_explanations(model_kind, features, out, X, shap_mat,
+                                       max_workers=llm_workers)
+        out["explanation"] = texts
+        n_ok = sum(1 for t in texts if t)
+        print(f"  LLM explanations generated: {n_ok:,}/{len(out):,}")
+    elif with_llm:
+        print("  LLM layer not configured (LLM_BASE_URL unset); skipping explanations.")
+
     os.makedirs(su.SHAP_CACHE, exist_ok=True)
     global_path = os.path.join(su.SHAP_CACHE, f"global_{model_kind}.parquet")
     out.to_parquet(global_path, index=False)
@@ -125,6 +180,12 @@ def main():
     parser = argparse.ArgumentParser(description="Precompute SHAP caches for the dashboard.")
     parser.add_argument("--sample", type=int, default=8000,
                         help="Subscribers to sample per model (default 8000).")
+    parser.add_argument("--llm", dest="llm", action="store_true", default=True,
+                        help="Generate LLM explanations (default on).")
+    parser.add_argument("--no-llm", dest="llm", action="store_false",
+                        help="Skip LLM explanation generation.")
+    parser.add_argument("--llm-workers", type=int, default=8,
+                        help="Concurrent requests to the vLLM server (default 8).")
     args = parser.parse_args()
 
     print("Loading inference features and predictions from cache...")
@@ -139,7 +200,8 @@ def main():
     meta = {"sample_size": args.sample, "models": []}
     for flag, kind in FLAG_TO_KIND.items():
         sub = infer[infer["pack_flag"] == flag]
-        info = precompute_for_kind(kind, sub, top_pack, args.sample)
+        info = precompute_for_kind(kind, sub, top_pack, args.sample,
+                                   with_llm=args.llm, llm_workers=args.llm_workers)
         if info:
             meta["models"].append(info)
 

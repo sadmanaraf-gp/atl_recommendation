@@ -13,3 +13,11 @@ streamlit
 matplotlib
 plotly
 pyarrow
+openai
+# vLLM (LLM explanation server) is installed in a separate venv, .venv-vllm, to
+# avoid torch/CUDA conflicts with tensorflow[and-cuda]:
+#   python -m venv .venv-vllm
+#   .venv-vllm/bin/pip install "vllm==0.6.*" "transformers==4.47.1"
+# transformers MUST be pinned to 4.47.x: vllm 0.6.6 breaks on transformers>=5
+# (Qwen2Tokenizer has no attribute all_special_tokens_extended).
+# See scripts/serve_llm.sh.

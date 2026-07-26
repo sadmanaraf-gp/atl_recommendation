@@ -321,6 +321,20 @@ def shap_for_class(explainer, x_scaled_row, class_idx):
     return np.asarray(per_class[class_idx])[0]
 
 
+def shap_for_class_batch(explainer, X_scaled, class_idx):
+    """SHAP values for a batch of subscribers, all explained against ONE class.
+
+    X_scaled is shape (n, features). Returns an (n, features) matrix. Unlike
+    shap_top1 (which explains each row's own top-ranked pack), every row here is
+    explained against the same `class_idx`, so the pack-scoped dependence view
+    can show how a feature pushes one specific denomination across customers.
+    """
+    X = np.asarray(X_scaled, dtype=np.float32)
+    shap_values = explainer.shap_values(X)
+    per_class = _as_class_list(shap_values)
+    return np.asarray(per_class[class_idx])
+
+
 def expected_value_for_class(explainer, model, background_scaled, class_idx):
     """Base value (E[f(x)]) for a class = mean model output over the background.
 

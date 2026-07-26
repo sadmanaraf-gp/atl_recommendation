@@ -35,6 +35,19 @@ if ROOT not in sys.path:
 load_dotenv(os.path.join(ROOT, ".env"))
 
 from explain import shap_utils as su  # noqa: E402
+from explain import llm_explain  # noqa: E402
+
+# Cap TensorFlow's GPU memory so the SHAP GradientExplainer only holds what it
+# needs (~1-2 GB) instead of grabbing the whole L40S. This leaves room for the
+# separate local vLLM server that generates the LLM explanations to share the
+# same GPU. Must run before any TF op touches the device.
+try:
+    import tensorflow as tf  # noqa: E402
+
+    for _gpu in tf.config.list_physical_devices("GPU"):
+        tf.config.experimental.set_memory_growth(_gpu, True)
+except Exception:
+    pass
 
 KIND_LABELS = {"taker": "Taker (existing pack buyers)",
                "non_taker": "Non-Taker (low-engagement)"}
@@ -83,6 +96,17 @@ def get_model_bundle(model_kind):
     return art
 
 
+@st.cache_data(show_spinner=False)
+def cached_llm_explanation(msisdn, deno, kind, _feats, _shap_vec, _x_unscaled,
+                           _ref, _confidence):
+    """LLM narrative for one (subscriber, pack), cached on (msisdn, deno, kind).
+    The array args are prefixed with `_` so Streamlit keys only on the ids.
+    Returns None when the LLM layer is disabled or unreachable."""
+    return llm_explain.explain(
+        kind, deno, _feats, _shap_vec, _x_unscaled, _ref, confidence=_confidence
+    )
+
+
 def shap_columns(df, features):
     return df[[f"shap_{c}" for c in features]].to_numpy()
 
@@ -109,6 +133,38 @@ def pack_reference(model_kind, deno, min_rows=20):
     return {c: float(med[f"val_{c}"]) for c in features}
 
 
+@st.cache_data(show_spinner=False)
+def pack_dependence_data(model_kind, deno, max_rows=1500):
+    """SHAP for ONE chosen pack (denomination) across the sampled subscribers,
+    computed live and cached on (model_kind, deno).
+
+    The precomputed global cache explains each subscriber's OWN top-1 pack, so
+    it can't answer "how does feature X move pack Y for everyone?". This runs the
+    explainer against a single class for the whole sample instead. Returns a
+    DataFrame with val_<feat> and shap_<feat> columns, or None if unavailable.
+
+    Capped at max_rows for responsiveness — a scatter reads the same with ~1.5k
+    points, and per-class SHAP over the full sample would be needlessly slow.
+    """
+    sample = load_sample_features(model_kind)
+    if sample is None:
+        return None
+    bundle = get_model_bundle(model_kind)
+    feats, class_names = bundle["features"], bundle["class_names"]
+    if int(deno) not in class_names:
+        return None
+    class_idx = su.deno_to_class_idx(class_names, int(deno))
+
+    s = sample if len(sample) <= max_rows else sample.sample(n=max_rows, random_state=42)
+    X = s[feats].to_numpy(dtype=np.float32)
+    X_scaled = bundle["scaler"].transform(X).astype(np.float32)
+    shap_mat = su.shap_for_class_batch(bundle["explainer"], X_scaled, class_idx)
+
+    val_df = pd.DataFrame(X, columns=[f"val_{c}" for c in feats])
+    shap_df = pd.DataFrame(shap_mat, columns=[f"shap_{c}" for c in feats])
+    return pd.concat([val_df, shap_df], axis=1)
+
+
 # --------------------------------------------------------------------------- #
 # Plain-language narrative
 # --------------------------------------------------------------------------- #
@@ -125,7 +181,9 @@ def narrative(features, shap_vec, value_vec, ref_values, top_n=5):
     bullets = []
     for i in order:
         feat = features[i]
-        name = su.friendly_name(feat)
+        # .strip() so no stray leading/trailing space slips between the ** and the
+        # text — markdown renders "**name **" as literal asterisks, not bold.
+        name = su.friendly_name(feat).strip()
         effect = "raised" if shap_vec[i] > 0 else "lowered"
         cust = su.format_value(feat, value_vec[i])
         typ = su.format_value(feat, ref_values[i])
@@ -428,13 +486,33 @@ def view_subscriber():
     ref = np.array([ref_map.get(c, 0.0) for c in feats], dtype=np.float32)
 
     st.subheader("In plain language")
-    st.markdown(
-        f"Biggest factors behind Pack **{choice}**'s score for this customer "
-        "(actual value vs. what's typical for this pack's buyers → **raised** or "
-        "**lowered** its ranking):"
-    )
-    for b in narrative(feats, shap_vec, x_unscaled, ref):
-        st.markdown(f"- {b}")
+
+    # LLM narrative (local vLLM), grounded on the SHAP drivers below. Falls back
+    # to the mechanical bullets when the LLM layer is disabled or unreachable.
+    confidence = float(top5[top5["pack (deno)"] == choice]["probability"].iloc[0])
+    llm_text = None
+    if llm_explain.is_configured():
+        with st.spinner("Generating explanation..."):
+            llm_text = cached_llm_explanation(
+                str(msisdn), int(choice), kind, feats, shap_vec, x_unscaled,
+                ref, confidence,
+            )
+
+    if llm_text:
+        # Generated summary up top; the exact SHAP drivers it was grounded on
+        # stay one click away as an audit trail.
+        st.markdown(llm_text)
+        with st.expander("Show factor breakdown"):
+            for b in narrative(feats, shap_vec, x_unscaled, ref):
+                st.markdown(f"- {b}")
+    else:
+        st.markdown(
+            f"Biggest factors behind Pack **{choice}**'s score for this customer "
+            "(actual value vs. what's typical for this pack's buyers → **raised** or "
+            "**lowered** its ranking):"
+        )
+        for b in narrative(feats, shap_vec, x_unscaled, ref):
+            st.markdown(f"- {b}")
 
     st.pyplot(contribution_chart(feats, shap_vec, x_unscaled), clear_figure=True)
 
@@ -455,11 +533,14 @@ def view_subscriber():
 # --------------------------------------------------------------------------- #
 def view_dependence():
     st.header("Feature Dependence")
-    st.caption("How the value of one feature moves its contribution to the recommended pack.")
+    st.caption("How the value of one feature moves its contribution to a chosen pack.")
     help_box(
         "- Each dot is one sampled customer.\n"
+        "- **Pack to explain:** *Recommended* uses each customer's **own top-1** pack (the "
+        "precomputed cache). Pick a **denomination** to see how features push **that one pack** "
+        "for everyone — computed live from the model.\n"
         "- **X-axis:** the chosen attribute's actual value. **Y-axis:** how much that attribute "
-        "pushed the recommended pack up or down (its SHAP effect).\n"
+        "pushed the selected pack up or down (its SHAP effect).\n"
         "- Dots **above** the dashed line **increased** the pack's probability for that customer; "
         "**below** the line, **decreased** it.\n"
         "- The overall shape shows the relationship — e.g. rising left-to-right means *more of "
@@ -475,28 +556,50 @@ def view_dependence():
         return
     features = su.features_for(kind)
 
+    # Pack scope: each customer's own top-1 pack (precomputed) or one fixed pack
+    # (computed on demand for every sampled customer).
+    denos = sorted(int(d) for d in g["deno"].unique())
+    pack_choice = st.selectbox(
+        "Pack to explain",
+        ["Recommended (each customer's own top pick)"] + [str(d) for d in denos],
+        help="'Recommended' reads the precomputed SHAP for each customer's top-1 pack. "
+             "Choose a denomination to compute — live — how features push THAT pack for everyone.",
+    )
+
+    if pack_choice.startswith("Recommended"):
+        source = g
+        scope = "each customer's own recommended (top-1) pack"
+    else:
+        with st.spinner(f"Computing SHAP for pack {pack_choice} across sampled subscribers..."):
+            source = pack_dependence_data(kind, int(pack_choice))
+        if source is None:
+            st.info("That pack isn't a model output, or the sample cache is missing. "
+                    "Run `python -m explain.precompute_shap` first.")
+            return
+        scope = f"pack {pack_choice} (the same pack for every customer)"
+
     feat = st.selectbox("Feature", features,
                         format_func=lambda f: f"{su.friendly_name(f)}  ({f})")
     color_feat = st.selectbox("Color by (interaction)", ["(none)"] + features,
                               format_func=lambda f: su.friendly_name(f) if f != "(none)" else f)
 
     plot_df = pd.DataFrame({
-        "value": g[f"val_{feat}"],
-        "shap": g[f"shap_{feat}"],
+        "value": source[f"val_{feat}"].to_numpy(),
+        "shap": source[f"shap_{feat}"].to_numpy(),
     })
     kwargs = {}
     if color_feat != "(none)":
-        plot_df["color"] = g[f"val_{color_feat}"]
+        plot_df["color"] = source[f"val_{color_feat}"].to_numpy()
         kwargs = {"color": "color", "color_continuous_scale": "RdBu"}
     fig = px.scatter(plot_df, x="value", y="shap", opacity=0.6,
                      labels={"value": su.friendly_name(feat),
                              "shap": f"SHAP value for {su.friendly_name(feat)}",
                              "color": su.friendly_name(color_feat) if color_feat != "(none)" else ""},
-                     title=f"Dependence: {su.friendly_name(feat)}", **kwargs)
+                     title=f"Dependence: {su.friendly_name(feat)}  →  {scope}", **kwargs)
     fig.add_hline(y=0, line_dash="dash", line_color="gray")
     st.plotly_chart(fig, use_container_width=True)
-    st.caption("Points above the dashed line: this feature increased the recommended pack's "
-               "probability for that subscriber; below: decreased it.")
+    st.caption(f"SHAP effect measured against {scope}. Points above the dashed line: this "
+               f"feature increased the pack's probability for that subscriber; below: decreased it.")
 
 
 # --------------------------------------------------------------------------- #

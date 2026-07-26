@@ -11,10 +11,13 @@ def read_oracle_data(query, user, password, dsn):
         print(f"An error occurred while reading from Oracle: {e}")
         return None
 
-def export_to_oracle(df, table_name, user, password, dsn, batch_size=500000):
+def export_to_oracle(df, table_name, user, password, dsn, batch_size=500000, replace=True):
     """
     Export DataFrame to an Oracle database table.
     Creates the table if it doesn't exist and inserts data in streaming batches.
+
+    When replace=True (default), an existing target table is TRUNCATEd before
+    insert so re-runs stay idempotent instead of appending duplicate rows.
     """
     def get_oracle_type(dtype):
         if pd.api.types.is_integer_dtype(dtype):
@@ -41,6 +44,9 @@ def export_to_oracle(df, table_name, user, password, dsn, batch_size=500000):
             with connection.cursor() as cursor:
                 try:
                     cursor.execute(f"SELECT * FROM {table_name} WHERE 1=0")
+                    if replace:
+                        cursor.execute(f"TRUNCATE TABLE {table_name}")
+                        print(f"Truncated existing {table_name} before insert.")
                 except oracledb.DatabaseError:
                     print(f"Table {table_name} not found. Creating it...")
                     cursor.execute(create_table_sql)

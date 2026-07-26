@@ -101,9 +101,9 @@ def preprocess_data(base_df, infer=False):
 
     # 1) Revenue mix / ARPU share -------------------------------------------
 
-    df['data_rev_share'] = _safe_div(df['datarev_total'], df['arpu_total'])
-    df['voice_rev_share'] = _safe_div(df['voicerev_total'], df['arpu_total'])
-    df['bundle_rev_share'] = _safe_div(df['mixed_bundle_rev'], df['arpu_total'])
+    df['data_rev_share'] = _safe_div(df['datarev_total'], df['total_dstr'])
+    df['voice_rev_share'] = _safe_div(df['voicerev_total'], df['total_dstr'])
+    df['bundle_rev_share'] = _safe_div(df['mixed_bundle_rev'], df['total_dstr'])
 
     # 2) Unit economics ------------------------------------------------------
     df['appmb'] = _safe_div(df['datarev_total'], df['vol_mb'])
@@ -137,7 +137,7 @@ def preprocess_data(base_df, infer=False):
     df['mygp_persistence'] = df['mygp_m1_act'] + df['mygp_m2_act']
 
     # 5) Activity-normalized & RFM ------------------------------------------
-    df['rev_per_active_day'] = _safe_div(df['arpu_total'], df['mygp_active_days'])
+    df['rev_per_active_day'] = _safe_div(df['total_dstr'], df['mygp_active_days'])
     df['recharge_per_active_day'] = _safe_div(df['recharge_cnt'],
                                               df['mygp_active_days'])
     df['data_voice_day_ratio'] = _safe_div(df['data_rg_days'], df['voice_rg_days'])
