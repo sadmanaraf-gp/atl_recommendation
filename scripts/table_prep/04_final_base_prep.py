@@ -118,61 +118,62 @@ STATEMENTS: List[str] = [
     CREATE TABLE TBL_ATL_PREDICTION_{PM}_UPSELL
     COMPRESS FOR ARCHIVE HIGH AS
     SELECT MSISDN,
-    CASE	WHEN	DENO	=	98	THEN	118
-            WHEN	DENO	=	118	THEN	148
-            WHEN	DENO	=	148	THEN	179
-            WHEN	DENO	=	179	THEN	198
-            WHEN	DENO	=	198	THEN	219
-            WHEN	DENO	=	219	THEN	249
-            WHEN	DENO	=	249	THEN	308
-            WHEN	DENO	=	308	THEN	399
-            WHEN	DENO	=	399	THEN	499
-            WHEN	DENO	=	499	THEN	599
-            WHEN	DENO	=	599	THEN	698
-            WHEN	DENO	=	698	THEN	798
-            WHEN	DENO	=	798	THEN	898
-            WHEN	DENO	=	898	THEN	899
-                                
-            WHEN	DENO	=	217	THEN	258
-            WHEN	DENO	=	258	THEN	398
-            WHEN	DENO	=	398	THEN	498
-            WHEN	DENO	=	498	THEN	598
-            WHEN	DENO	=	598	THEN	699
-            WHEN	DENO	=	699	THEN	818
-            WHEN	DENO	=	818	THEN	999
-            WHEN	DENO	=	999	THEN	1099
-            WHEN	DENO	=	1099	THEN	1199
-                                
-            WHEN	DENO	=	59	THEN	89
-            WHEN	DENO	=	89	THEN	107
-            WHEN	DENO	=	107	THEN	129
-            WHEN	DENO	=	129	THEN	208
-            WHEN	DENO	=	208	THEN	309
-            WHEN	DENO	=	309	THEN	509
-            WHEN	DENO	=	509	THEN	989
-                                
-            WHEN	DENO	=	9	THEN	11
-            WHEN	DENO	=	11	THEN	15
-            WHEN	DENO	=	15	THEN	19
-            WHEN	DENO	=	19	THEN	29
-            WHEN	DENO	=	29	THEN	39
-            WHEN	DENO	=	39	THEN	49
-            WHEN	DENO	=	49	THEN	68
-            WHEN	DENO	=	68	THEN	99
-            WHEN	DENO	=	99	THEN	119
-            WHEN	DENO	=	119	THEN	139
-            WHEN	DENO	=	139	THEN	158
-            WHEN	DENO	=	158	THEN	197
-            WHEN	DENO	=	197	THEN	228
-            WHEN	DENO	=	228	THEN	268
-            WHEN	DENO	=	268	THEN	279
-            WHEN	DENO	=	279	THEN	319
-            WHEN	DENO	=	319	THEN	339
-            WHEN	DENO	=	339	THEN	419
-            WHEN	DENO	=	419	THEN	519
-            WHEN	DENO	=	519	THEN	547
-            WHEN	DENO	=	547	THEN	639
-            WHEN	DENO	=	639	THEN	729
+        CASE	WHEN	DENO	=	98	THEN	118
+        WHEN	DENO	=	118	THEN	148
+        WHEN	DENO	=	148	THEN	179
+        WHEN	DENO	=	179	THEN	198
+        WHEN	DENO	=	198	THEN	219
+        WHEN	DENO	=	219	THEN	249
+        WHEN	DENO	=	249	THEN	308
+        WHEN	DENO	=	308	THEN	399
+        WHEN	DENO	=	399	THEN	499
+        WHEN	DENO	=	499	THEN	599
+        WHEN	DENO	=	599	THEN	698
+        WHEN	DENO	=	698	THEN	798
+        WHEN	DENO	=	798	THEN	898
+        WHEN	DENO	=	898	THEN	899
+                            
+        WHEN	DENO	=	217	THEN	258
+        WHEN	DENO	=	258	THEN	279
+        WHEN	DENO	=	279	THEN	398
+        WHEN	DENO	=	398	THEN	498
+        WHEN	DENO	=	498	THEN	598
+        WHEN	DENO	=	598	THEN	699
+        WHEN	DENO	=	699	THEN	799
+        WHEN	DENO	=	799	THEN	999
+        WHEN	DENO	=	999	THEN	1099
+        WHEN	DENO	=	1099	THEN	1199
+                            
+        WHEN	DENO	=	59	THEN	89
+        WHEN	DENO	=	89	THEN	107
+        WHEN	DENO	=	107	THEN	129
+        WHEN	DENO	=	129	THEN	208
+        WHEN	DENO	=	208	THEN	309
+        WHEN	DENO	=	309	THEN	509
+        WHEN	DENO	=	509	THEN	989
+                            
+        WHEN	DENO	=	9	THEN	11
+        WHEN	DENO	=	11	THEN	15
+        WHEN	DENO	=	15	THEN	19
+        WHEN	DENO	=	19	THEN	29
+        WHEN	DENO	=	29	THEN	39
+        WHEN	DENO	=	39	THEN	49
+        WHEN	DENO	=	49	THEN	68
+        WHEN	DENO	=	68	THEN	99
+        WHEN	DENO	=	99	THEN	119
+        WHEN	DENO	=	119	THEN	139
+        WHEN	DENO	=	139	THEN	158
+        WHEN	DENO	=	158	THEN	197
+        WHEN	DENO	=	197	THEN	228
+        WHEN	DENO	=	228	THEN	268
+        WHEN	DENO	=	268	THEN	319
+        WHEN	DENO	=	319	THEN	339
+        WHEN	DENO	=	339	THEN	419
+        WHEN	DENO	=	419	THEN	519
+        WHEN	DENO	=	519	THEN	547
+        WHEN	DENO	=	547	THEN	639
+        WHEN	DENO	=	639	THEN	729
+
             ELSE TO_NUMBER(DENO)
            END AS DENO,
            PROB,
@@ -204,20 +205,24 @@ STATEMENTS: List[str] = [
     f"DROP TABLE TBL_ATL_PREDICTION_{PM}_2 PURGE",
     f"""
     CREATE TABLE TBL_ATL_PREDICTION_{PM}_2
-    COMPRESS FOR ARCHIVE HIGH AS
-    SELECT TO_NUMBER(MSISDN) MSISDN,
+    COMPRESS FOR ARCHIVE HIGH
+    PARALLEL 8 AS
+    SELECT /*+ PARALLEL(8) */
+           TO_NUMBER(MSISDN) MSISDN,
            TO_NUMBER(DENO) DENO,
            CAST(PROB AS FLOAT) PROB,
            TO_NUMBER(RANK) RANK,
            CAST(GROUP_TYPE AS VARCHAR2(32)) GROUP_TYPE
     FROM TBL_ATL_PREDICTION_{PM}_UPSELL
     UNION
-    SELECT TO_NUMBER(MSISDN), TO_NUMBER(DENO),
+    SELECT /*+ PARALLEL(8) */
+           TO_NUMBER(MSISDN), TO_NUMBER(DENO),
            CAST(PROB AS FLOAT), TO_NUMBER(RANK),
            CAST(GROUP_TYPE AS VARCHAR2(32))
     FROM TBL_ATL_PREDICTION_{PM}_PROB
     UNION
-    SELECT TO_NUMBER(MSISDN), TO_NUMBER(DENO),
+    SELECT /*+ PARALLEL(8) */
+           TO_NUMBER(MSISDN), TO_NUMBER(DENO),
            CAST(PROB AS FLOAT), TO_NUMBER(RANK),
            CAST(GROUP_TYPE AS VARCHAR2(32))
     FROM TBL_ATL_PREDICTION_{PM}_1
@@ -266,6 +271,50 @@ STATEMENTS: List[str] = [
 # =========================
 # Utilities
 # =========================
+
+# Errors that mean the link died, not that the SQL was bad. The CREATEs here run
+# for many minutes with no traffic on the socket, so an idle firewall or a
+# server-side reaper can drop us mid-statement.
+CONNECTION_LOST_CODES = (
+    "DPY-4011",   # database or network closed the connection
+    "DPY-1001",   # not connected to database
+    "DPY-4024",   # connection closed while operation in progress
+    "ORA-03113",  # end-of-file on communication channel
+    "ORA-03114",  # not connected to ORACLE
+    "ORA-12570",  # network session: unexpected packet read error
+    "ORA-00028",  # session killed
+)
+
+MAX_ATTEMPTS = 3
+
+
+def is_connection_lost(exc: Exception) -> bool:
+    text = str(exc)
+    return any(code in text for code in CONNECTION_LOST_CODES)
+
+
+def connect():
+    """Open a connection with TCP keepalive so long DDL doesn't get reaped."""
+    return oracledb.connect(
+        user=os.getenv("ORACLE_USER"),
+        password=os.getenv("ORACLE_PASSWORD"),
+        dsn=os.getenv("ORACLE_DSN"),
+        # send a keepalive probe every minute while a statement is running
+        expire_time=1,
+        tcp_connect_timeout=30,
+    )
+
+
+def drop_if_exists(cursor, table_name: str):
+    """Clear a half-built table left behind by a statement that died mid-flight."""
+    try:
+        cursor.execute(f"DROP TABLE {table_name} PURGE")
+        print(f"      (cleanup) dropped partial {table_name}")
+    except oracledb.Error as e:
+        if "ORA-00942" not in str(e):
+            raise
+
+
 def sanity_check_rows(cursor, table_name: str, min_rows: int = 1):
     cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
     (cnt,) = cursor.fetchone()
@@ -290,32 +339,60 @@ def main() -> int:
         print(f"Invalid pred_month={PM}", file=sys.stderr)
         return 3
 
-    with oracledb.connect(user=user, password=password, dsn=dsn) as conn:
-        with conn.cursor() as cur:
-            for i, stmt in enumerate(STATEMENTS, start=1):
-                stmt = stmt.strip()
-                if not stmt:
-                    continue
+    conn = connect()
+    cur = conn.cursor()
+    try:
+        for i, stmt in enumerate(STATEMENTS, start=1):
+            stmt = stmt.strip()
+            if not stmt:
+                continue
 
-                first_line = stmt.splitlines()[0]
-                create_match = re.match(r"CREATE\s+TABLE\s+(\w+)", stmt, re.I)
-                table_created = create_match.group(1) if create_match else None
+            first_line = stmt.splitlines()[0]
+            create_match = re.match(r"CREATE\s+TABLE\s+(\w+)", stmt, re.I)
+            table_created = create_match.group(1) if create_match else None
 
-                print(f"[{i}/{len(STATEMENTS)}] Executing: {first_line[:120]}")
+            print(f"[{i}/{len(STATEMENTS)}] Executing: {first_line[:120]}")
 
+            for attempt in range(1, MAX_ATTEMPTS + 1):
                 try:
                     cur.execute(stmt)
                     conn.commit()
 
                     if table_created:
                         sanity_check_rows(cur, table_created)
+                    break
 
                 except oracledb.Error as e:
                     if "ORA-00942" in str(e) and stmt.upper().startswith("DROP TABLE"):
                         print("      (ignored) ORA-00942")
                         conn.commit()
-                        continue
-                    raise
+                        break
+
+                    if not is_connection_lost(e) or attempt == MAX_ATTEMPTS:
+                        raise
+
+                    print(
+                        f"      ⚠ connection lost ({str(e).splitlines()[0]}); "
+                        f"reconnecting and retrying ({attempt}/{MAX_ATTEMPTS - 1})"
+                    )
+                    try:
+                        conn.close()
+                    except oracledb.Error:
+                        pass
+
+                    conn = connect()
+                    cur = conn.cursor()
+
+                    # a CREATE that died mid-flight may have left the table behind
+                    if table_created:
+                        drop_if_exists(cur, table_created)
+                        conn.commit()
+    finally:
+        try:
+            cur.close()
+            conn.close()
+        except oracledb.Error:
+            pass
 
     print("Final prediction base creation completed.")
     return 0

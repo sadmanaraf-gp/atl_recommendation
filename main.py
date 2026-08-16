@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import os
+import shutil
 import sys
 
 # Ensure this directory (prod) is on sys.path so `scripts` is importable
@@ -34,6 +35,35 @@ def _run_file(rel_path):
     return rc if isinstance(rc, int) else 0
 
 
+CLEAN_DIRS = ["artifacts", "data"]
+
+
+def _run_clean():
+    """Empty the artifacts/ and data/ directories before a fresh pipeline run.
+
+    The directories themselves are kept (and created if missing) so the later
+    steps can write into them; everything inside, including subdirectories such
+    as artifacts/shap_cache, is removed.
+    """
+    for rel_dir in CLEAN_DIRS:
+        abs_dir = os.path.join(CURRENT_DIR, rel_dir)
+        os.makedirs(abs_dir, exist_ok=True)
+        removed = 0
+        for entry in os.listdir(abs_dir):
+            path = os.path.join(abs_dir, entry)
+            try:
+                if os.path.isdir(path) and not os.path.islink(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+                removed += 1
+            except OSError as exc:
+                print(f"[main] Failed to delete {path}: {exc}", flush=True)
+                return 1
+        print(f"[main] Cleaned {rel_dir}/ ({removed} entries removed).", flush=True)
+    return 0
+
+
 def _run_train():
     from train import main as train_main
     return train_main()
@@ -44,9 +74,12 @@ def _run_predict():
     return predict_main()
 
 
+# Opt-in only: destructive, so it is never part of the default 'all' run.
+CLEAN_STEP = ("clean", _run_clean)
+
 # Ordered pipeline: (step name, callable returning an exit code / None).
 PIPELINE = [
-    # ("01_train_prep", lambda: _run_file("scripts/table_prep/01_train_prep.py")),
+    ("01_train_prep", lambda: _run_file("scripts/table_prep/01_train_prep.py")),
     ("train", _run_train),
     ("02_infer_prep", lambda: _run_file("scripts/table_prep/02_infer_prep.py")),
     ("predict", _run_predict),
@@ -56,6 +89,7 @@ PIPELINE = [
 ]
 
 STEP_NAMES = [name for name, _ in PIPELINE]
+ALL_STEPS = [CLEAN_STEP] + PIPELINE
 
 
 def run_pipeline(steps):
@@ -79,20 +113,33 @@ def main():
         "command",
         nargs="?",
         default="all",
-        choices=["all"] + STEP_NAMES,
+        choices=["all", "clean"] + STEP_NAMES,
         help=(
             "Which step to run. 'all' (default) runs the full pipeline in order: "
             + " -> ".join(STEP_NAMES)
-            + ". Otherwise run a single named step."
+            + ". Otherwise run a single named step. 'clean' deletes everything "
+            "in artifacts/ and data/ and is never run unless asked for."
+        ),
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help=(
+            "Delete every file in artifacts/ and data/ before running. "
+            "This destroys the trained models and all cached base data."
         ),
     )
     args = parser.parse_args()
 
     if args.command == "all":
-        run_pipeline(PIPELINE)
+        steps = list(PIPELINE)
     else:
-        step = next(s for s in PIPELINE if s[0] == args.command)
-        run_pipeline([step])
+        steps = [next(s for s in ALL_STEPS if s[0] == args.command)]
+
+    if args.clean and steps[0][0] != "clean":
+        steps.insert(0, CLEAN_STEP)
+
+    run_pipeline(steps)
 
 
 if __name__ == "__main__":

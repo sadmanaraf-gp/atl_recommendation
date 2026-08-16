@@ -1,3 +1,5 @@
+from datetime import datetime
+
 # List of features for the model
 COLS = ['msisdn', 'total_dstr', 'voicerev_total', 'datarev_total',
        'mixed_bundle_rev', 'voicerev_trig', 'datarev_trig', 'vol_mb', 'mo_mou',
@@ -108,5 +110,6 @@ TABLE_INFER_01 = "SA_TBL_ATL_BASE_INFER_01"
 TABLE_INFER_02 = "SA_TBL_ATL_BASE_INFER_02"
 TABLE_INFER_03 = "SA_TBL_ATL_BASE_INFER_03"
 TABLE_PRED_PREFIX = "SA_TBL_ATL_PRED_"
-FINAL_TABLE = "SA_TBL_ATL_PRED_202607"
+# Named for the month of the run, e.g. a run in Aug 2026 -> SA_TBL_ATL_PRED_202608
+FINAL_TABLE = TABLE_PRED_PREFIX + datetime.now().strftime("%Y%m")
 

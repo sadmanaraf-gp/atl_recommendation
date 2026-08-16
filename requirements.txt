@@ -8,6 +8,7 @@ oracledb
 SQLAlchemy
 h5py
 python-dotenv
+python-dateutil
 shap
 streamlit
 matplotlib
